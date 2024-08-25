@@ -26,16 +26,21 @@ const options = {
     short: "V",
     default: false,
   },
+  echo: {
+    type: "boolean",
+    short: "c",
+    default: false,
+  },
 };
 
 const { values, positionals } = parseArgs({ options, allowPositionals: true });
 
-if (positionals.length !== 1) {
+if (!values.echo && positionals.length !== 1) {
   console.error("Usage: cold-serve <path-to-file> [options]");
   process.exit(1);
 }
 
-const filePath = join(process.cwd(), positionals[0]);
+const filePath = join(process.cwd(), positionals[0] || "");
 const port = parseInt(values.port, 10);
 
 const caseEvents = async () => {
@@ -85,8 +90,40 @@ const caseServe = async () => {
   }
 };
 
-if (!values.events) {
-  caseServe();
+if (values.echo) {
+  serve(
+    {
+      port,
+      onListen({ port }) {
+        if (values.verbose) {
+          console.log(`Echoing on port ${port}`);
+        }
+      },
+    },
+    async (request) => {
+      const reqObject = {
+        method: request.method,
+        url: request.url,
+        headers: Object.fromEntries(request.headers),
+        body: await request.text(),
+      };
+
+      const requestJSON = JSON.stringify(reqObject, null, " ");
+      if (values.verbose) {
+        console.log("requestJSON: ", requestJSON);
+      }
+      return new Response(requestJSON, {
+        status: 200,
+        headers: new Headers({
+          "content-type": "application/json",
+        }),
+      });
+    }
+  );
 } else {
-  caseEvents();
+  if (!values.events) {
+    caseServe();
+  } else {
+    caseEvents();
+  }
 }

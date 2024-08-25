@@ -9,3 +9,4 @@ const handler = await import(join(dir, HANDLER_LOCATION)).then(
   (module) => module[EXPORT]
 );
 serve({ port: PORT }, handler);
+console.log(`Listening on port ${PORT}`);

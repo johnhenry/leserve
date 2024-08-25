@@ -7,3 +7,4 @@ const SERVER_LOCATION = "./_events.mjs";
 const PORT = 8081;
 start({ port: PORT });
 import(join(dir, SERVER_LOCATION));
+console.log(`Listening on port ${PORT}`);

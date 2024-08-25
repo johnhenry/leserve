@@ -77,6 +77,7 @@ export const serve = (handlerOrOptions, maybeHandler) => {
     if (typeof options.onListen === "function") {
       options.onListen({
         path: `http${cert && key ? "s" : ""}://${hostname}:${port}/`,
+        port,
       });
     }
   });

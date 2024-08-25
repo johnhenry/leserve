@@ -1,15 +1,13 @@
-# Serve Cold
+# Serve Cold ❄️
 
-HTTP is a dish best... wait a minute... this doesnt make much sense, now does it?
+"HTTP is a dish best best served co... wait a minute... does that make sense?"
 
-[![npm version](https://badge.fury.io/js/served-cold.svg)](https://badge.fury.io/js/served-cold)'
+[![npm version](https://badge.fury.io/js/served-cold.svg)](https://badge.fury.io/js/served-cold)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <img alt="" width="512" height="512" src="./sc.jpeg" style="width:512px;height:512px"/>
 
-A utility to find the directory and file name of the file from which it's called.
-
-A simple HTTP/HTTPS server with support for modern JavaScript features.
+A simple HTTP server with support for modern JavaScript features.
 
 ## Installation
 
@@ -17,10 +15,12 @@ A simple HTTP/HTTPS server with support for modern JavaScript features.
 npm install served-cold
 ```
 
-## Usage:serve
+## Usage: serve
+
+(See similar: [Deno.serve](https://docs.deno.com/api/deno/~/Deno.serve))
 
 ```javascript
-import serve from "served-cold";
+import serve from "served-cold/serve";
 
 const handler = (request) => {
   return new Response("Hello, World!", {
@@ -50,7 +50,9 @@ const server = serve(handler, { port: 3000 });
 
 The handler function receives a `Request` object and should return a `Response` object or a Promise that resolves to a `Response` object.
 
-## Usage:events
+## Usage: events + controls
+
+(See similar: [WinterJS](https://github.com/wasmerio/winterjs))
 
 ```javascript
 import "served-cold/events";
@@ -228,7 +230,7 @@ route("GET", "/hello/:name", async (req, params) => {
 });
 
 route("POST", "/echo", async (req) => {
-  const body = await req.mjson();
+  const body = await req.json();
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: { "Content-Type": "application/json" },
@@ -308,6 +310,7 @@ npx serve-cold <path-to-file> [options]
 - `-p, --port <port>`: Specify the port number (default: 8000)
 - `-e, --export <name>`: Specify the export name to use (default: 'default')
 - `-E, --events`: Enable events mode
+- `--echo`: Enable echo mode
 
 ### Default Behavior
 
@@ -365,7 +368,7 @@ This serves the export named 'handler' from `myHandlers.mjs` at `localhost:8080`
 
 ### Events Mode
 
-Using the `-E` or `--events` flag causes the server respond to events using `./controls.mjs` and `./event.mjs`.
+Using the `-E` or `--events` flag causes the server to respond to events using `./controls.mjs` and `./event.mjs`.
 
 Example:
 
@@ -389,6 +392,16 @@ serve-cold myEventHandler.mjs -E -p 8080
 ```
 
 This listens for events at `localhost:8080`.
+
+### Echo Mode
+
+Using the `-E` or `--events` flag causes the server to respond as an echo server.
+
+```bash
+serve-cold --echo
+```
+
+echos back requests as responses in JSON format on port 8000.
 
 ## Notes
 
