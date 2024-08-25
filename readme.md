@@ -403,11 +403,6 @@ serve-cold --echo
 
 echos back requests as responses in JSON format on port 8000.
 
-## Notes
-
-- This server implementation extends the global object, allowing you to call these methods directly (e.g., `addEventListener` instead of `globalThis.addEventListener`).
-- WebSocket support is provided through the `ws` package.
-
 ## License
 
 This project is licensed under the MIT License.
