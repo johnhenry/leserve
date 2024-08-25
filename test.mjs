@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { Agent } from "undici";
 import WebSocket from "ws";
-import { getRandomPort } from "./gen-random-port.mjs";
+import genPort from "./gen-random-port.mjs";
 // Import the server implementation
 import "./globals.mjs";
 import {
@@ -14,7 +14,7 @@ import {
   use,
   emit,
   createServerSentEvent,
-} from "./index.mjs";
+} from "./controls.mjs";
 addEventListener("start", ({ index, port }) =>
   console.log(`Server ${index} running on port ${port}.`)
 );
@@ -59,7 +59,7 @@ const sseHandler = (event) => {
 
 describe("Event Listener Server Tests", async () => {
   await test("Server start and stop", async () => {
-    const port = getRandomPort();
+    const port = genPort();
     const server = await start({ port });
     await assert.doesNotReject(fetch(`http://localhost:${port}`));
     await stop(server);
@@ -71,7 +71,7 @@ describe("Event Listener Server Tests", async () => {
   });
 
   await test("HTTPS server", async () => {
-    const port = getRandomPort();
+    const port = genPort();
     const httpsOptions = {
       key: `-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDYhAyKc91hGMeG
@@ -137,7 +137,7 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("Basic request handling", async () => {
-    const port = getRandomPort();
+    const port = genPort();
     const BasicRequestHandler = (event) => {
       event.respondWith(new Response("Hello, World!", { status: 200 }));
     };
@@ -151,7 +151,7 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("Routing", async () => {
-    const port = getRandomPort();
+    const port = genPort();
     route("GET", "/hello/:name", async (req, params) => {
       return new Response(`Hello, ${params.name}!`, { status: 200 });
     });
@@ -165,7 +165,7 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("Middleware", async () => {
-    const port = getRandomPort();
+    const port = genPort();
     let middlewareCalled = false;
     use(async (req, res) => {
       middlewareCalled = true;
@@ -187,7 +187,7 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("WebSocket", async () => {
-    const port = getRandomPort();
+    const port = genPort();
     return new Promise(async (resolve) => {
       const webSocketHandler = (ws) => {
         ws.on("message", (message) => {
@@ -210,7 +210,7 @@ VyyNz/1TUWii+PL9b9yswag=
 
   await test("Server-Sent Events", async () => {
     // TODO: can I use an EventSource Polyfill?
-    const port = getRandomPort();
+    const port = genPort();
     addEventListener("fetch", sseHandler);
     const server = await start({ port });
     const response = await fetch(`http://localhost:${port}/sse`);
@@ -241,7 +241,7 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("Error handling", async () => {
-    const port = getRandomPort();
+    const port = genPort();
     const fetchHandler = () => {
       throw new Error("Test error");
     };

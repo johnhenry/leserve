@@ -1,4 +1,4 @@
-import { addEventListener, removeEventListener } from "./index.mjs";
+import { addEventListener, removeEventListener } from "./controls.mjs";
 
 // Attach to process object
 Object.assign(globalThis, {

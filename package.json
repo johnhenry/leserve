@@ -1,12 +1,23 @@
 {
-  "name": "event-listener-server",
+  "name": "serve-cold",
   "version": "0.0.1",
   "description": "A powerful, flexible HTTP/HTTPS server implementation for Node.js that closely mimics web browser APIs while providing additional features like WebSockets, Server-Sent Events, middleware, and routing.",
-  "main": "index.mjs",
+  "main": "serve.mjs",
   "type": "module",
   "scripts": {
-    "test": "node --test test.mjs"
+    "test": "node --test test.mjs",
+    "demo:serve": "node demo/serve.mjs",
+    "demo:events": "node demo/events.mjs"
   },
+  "bin": {
+    "serve-cold": "serve-cold.mjs"
+  },
+  "keywords": [
+    "http",
+    "https",
+    "server",
+    "node"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -16,5 +27,12 @@
   "devDependencies": {
     "eventsource": "^2.0.2",
     "undici": "^6.19.8"
+  },
+  "exports": {
+    ".": "./serve.mjs",
+    "./serve": "./serve.mjs",
+    "./globals": "./globals.mjs",
+    "./controls": "./controls.mjs",
+    "./genport": "./gen-random-port.mjs"
   }
 }

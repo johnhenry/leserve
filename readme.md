@@ -1,4 +1,58 @@
-# Event Listener Server
+# Serve Cold
+
+HTTP is a dish best... wait a minute... this doesnt make much sense, now does it?
+
+[![npm version](https://badge.fury.io/js/served-cold.svg)](https://badge.fury.io/js/served-cold)'
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+<img alt="" width="512" height="512" src="./sc.jpeg" style="width:512px;height:512px"/>
+
+A utility to find the directory and file name of the file from which it's called.
+
+A simple HTTP/HTTPS server with support for modern JavaScript features.
+
+## Installation
+
+```bash
+npm install served-cold
+```
+
+## Usage
+
+```javascript
+import serve from "served-cold";
+
+const handler = (request) => {
+  return new Response("Hello, World!", {
+    status: 200,
+    headers: { "Content-Type": "text/plain" },
+  });
+};
+
+const server = serve(handler, { port: 3000 });
+```
+
+## API
+
+### `serve(handlerOrOptions, maybeHandler)`
+
+- `handlerOrOptions`: Either a handler function or an options object.
+- `maybeHandler`: If the first argument is an options object, this should be the handler function.
+
+#### Options
+
+- `port`: Port number (default: 8000)
+- `hostname`: Hostname (default: 'localhost')
+- `cert`: SSL certificate for HTTPS (optional)
+- `key`: SSL key for HTTPS (optional)
+
+#### Handler Function
+
+The handler function receives a `Request` object and should return a `Response` object or a Promise that resolves to a `Response` object.
+
+## License
+
+MIT
 
 A powerful, flexible HTTP/HTTPS server implementation for Node.js that closely mimics web browser APIs while providing additional features like WebSockets, Server-Sent Events, middleware, and routing.
 
