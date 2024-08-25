@@ -31,7 +31,7 @@
   "exports": {
     ".": "./serve.mjs",
     "./serve": "./serve.mjs",
-    "./globals": "./globals.mjs",
+    "./event": "./event.mjs",
     "./controls": "./controls.mjs",
     "./genport": "./gen-random-port.mjs"
   }

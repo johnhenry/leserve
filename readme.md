@@ -17,7 +17,7 @@ A simple HTTP/HTTPS server with support for modern JavaScript features.
 npm install served-cold
 ```
 
-## Usage
+## Usage:serve
 
 ```javascript
 import serve from "served-cold";
@@ -32,41 +32,29 @@ const handler = (request) => {
 const server = serve(handler, { port: 3000 });
 ```
 
-## API
+### API
 
-### `serve(handlerOrOptions, maybeHandler)`
+#### `serve(handlerOrOptions, maybeHandler)`
 
 - `handlerOrOptions`: Either a handler function or an options object.
 - `maybeHandler`: If the first argument is an options object, this should be the handler function.
 
-#### Options
+##### Options
 
 - `port`: Port number (default: 8000)
 - `hostname`: Hostname (default: 'localhost')
 - `cert`: SSL certificate for HTTPS (optional)
 - `key`: SSL key for HTTPS (optional)
 
-#### Handler Function
+##### Handler Function
 
 The handler function receives a `Request` object and should return a `Response` object or a Promise that resolves to a `Response` object.
 
-## License
-
-MIT
-
-A powerful, flexible HTTP/HTTPS server implementation for Node.js that closely mimics web browser APIs while providing additional features like WebSockets, Server-Sent Events, middleware, and routing.
-
-## Installation
-
-```bash
-npm install event-listener-server
-```
-
-## Basic Usage
+## Usage:events
 
 ```javascript
-import "event-listener-server/globals";
-import { start } from "event-listener-server";
+import "served-cold/events";
+import { start } from "served-cold/controls";
 start({ port: 3000 });
 addEventListener("fetch", (event) => {
   event.respondWith(new Response("Hello, World!", { status: 200 }));
@@ -296,9 +284,7 @@ addEventListener("fetch", async (event) => {
 ## Notes
 
 - This server implementation extends the global object, allowing you to call these methods directly (e.g., `addEventListener` instead of `globalThis.addEventListener`).
-- The server uses the `node-fetch` package to provide `Request` and `Response` objects that closely mimic the Web API.
 - WebSocket support is provided through the `ws` package.
-- The server automatically parses request bodies for common content types (JSON, form-urlencoded, plain text).
 
 ## License
 

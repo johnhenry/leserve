@@ -1,4 +1,4 @@
-import "../globals.mjs";
+import "../event.mjs";
 import { start } from "../controls.mjs";
 import theresWaldo from "theres-waldo";
 import { join } from "path";

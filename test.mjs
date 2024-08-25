@@ -6,7 +6,7 @@ import { Agent } from "undici";
 import WebSocket from "ws";
 import genPort from "./gen-random-port.mjs";
 // Import the server implementation
-import "./globals.mjs";
+import "./event.mjs";
 import {
   start,
   stop,
