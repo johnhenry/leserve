@@ -2,6 +2,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { Agent } from "undici";
 import WebSocket from "ws";
 import { getRandomPort } from "./gen-random-port.mjs";
 // Import the server implementation
@@ -34,23 +35,43 @@ const isPortClosed = (port) => {
     });
   });
 };
-import { Agent } from "undici";
+
+const sseHandler = (event) => {
+  if (event.request.url.endsWith("/sse")) {
+    const ts = new TransformStream();
+    const writer = ts.writable.getWriter();
+    writer.write(createServerSentEvent({ message: "Hello SSE" }, "update"));
+    writer.close();
+    event.respondWith(
+      new Response(ts.readable, {
+        headers: {
+          Connection: "keep-alive",
+          "Content-Encoding": "none",
+          "Cache-Control": "no-cache, no-transform",
+          "Content-Type": "text/event-stream",
+        },
+      })
+    );
+    return;
+  }
+  event.respondWith(new Response("Not Found", { status: 404 }));
+};
 
 describe("Event Listener Server Tests", async () => {
   await test("Server start and stop", async () => {
-    const testPort = getRandomPort();
-    const server = await start({ port: testPort });
-    await assert.doesNotReject(() => fetch(`http://localhost:${testPort}`));
+    const port = getRandomPort();
+    const server = await start({ port });
+    await assert.doesNotReject(fetch(`http://localhost:${port}`));
     await stop(server);
-    const isClosed = await isPortClosed(testPort);
+    const isClosed = await isPortClosed(port);
     assert.ok(
       isClosed,
-      `Port ${testPort} should be closed after stopping the server`
+      `Port ${port} should be closed after stopping the server`
     );
   });
 
   await test("HTTPS server", async () => {
-    const testPort = getRandomPort();
+    const port = getRandomPort();
     const httpsOptions = {
       key: `-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDYhAyKc91hGMeG
@@ -102,9 +123,9 @@ nryPiuupyiwNGkYiF6Vvvq8wbQAMydDrPTl7gWMtYfHFjpNK5CRHvu2+2RCHOZD3
 VyyNz/1TUWii+PL9b9yswag=
 -----END CERTIFICATE-----`,
     };
-    const server = await start({ port: testPort, https: httpsOptions });
-    await assert.doesNotReject(() =>
-      fetch(`https://localhost:${testPort}`, {
+    const server = await start({ port, https: httpsOptions });
+    await assert.doesNotReject(
+      fetch(`https://localhost:${port}`, {
         dispatcher: new Agent({
           connect: {
             rejectUnauthorized: false,
@@ -112,31 +133,17 @@ VyyNz/1TUWii+PL9b9yswag=
         }),
       })
     );
-    // await assert.doesNotReject(
-    //   async () =>
-    //     await new Promise((resolve, reject) =>
-    //       https.get(
-    //         `https://localhost:${testPort}`,
-    //         {
-    //           rejectUnauthorized: false,
-    //         },
-    //         (res) => {
-    //           resolve(res);
-    //         }
-    //       )
-    //     )
-    // );
     await stop(server);
   });
 
   await test("Basic request handling", async () => {
-    const testPort = getRandomPort();
+    const port = getRandomPort();
     const BasicRequestHandler = (event) => {
       event.respondWith(new Response("Hello, World!", { status: 200 }));
     };
     addEventListener("fetch", BasicRequestHandler);
-    const server = await start({ port: testPort });
-    const response = await fetch(`http://localhost:${testPort}`);
+    const server = await start({ port });
+    const response = await fetch(`http://localhost:${port}`);
     assert.equal(response.status, 200);
     assert.equal(await response.text(), "Hello, World!");
     await stop(server);
@@ -144,13 +151,13 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("Routing", async () => {
-    const testPort = getRandomPort();
+    const port = getRandomPort();
     route("GET", "/hello/:name", async (req, params) => {
       return new Response(`Hello, ${params.name}!`, { status: 200 });
     });
 
-    const server = await start({ port: testPort });
-    const response = await fetch(`http://localhost:${testPort}/hello/Alice`);
+    const server = await start({ port });
+    const response = await fetch(`http://localhost:${port}/hello/Alice`);
     assert.equal(response.status, 200);
     assert.equal(await response.text(), "Hello, Alice!");
 
@@ -158,7 +165,7 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("Middleware", async () => {
-    const testPort = getRandomPort();
+    const port = getRandomPort();
     let middlewareCalled = false;
     use(async (req, res) => {
       middlewareCalled = true;
@@ -170,9 +177,9 @@ VyyNz/1TUWii+PL9b9yswag=
 
     addEventListener("fetch", middlewareHandler);
 
-    const server = await start({ port: testPort });
+    const server = await start({ port });
 
-    await fetch(`http://localhost:${testPort}`);
+    await fetch(`http://localhost:${port}`);
     assert.equal(middlewareCalled, true);
 
     await stop(server);
@@ -180,7 +187,7 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("WebSocket", async () => {
-    const testPort = getRandomPort();
+    const port = getRandomPort();
     return new Promise(async (resolve) => {
       const webSocketHandler = (ws) => {
         ws.on("message", (message) => {
@@ -188,8 +195,8 @@ VyyNz/1TUWii+PL9b9yswag=
         });
       };
       addEventListener("websocket", webSocketHandler);
-      const server = await start({ port: testPort });
-      const ws = new WebSocket(`ws://localhost:${testPort}`);
+      const server = await start({ port });
+      const ws = new WebSocket(`ws://localhost:${port}`);
       ws.on("open", () => {
         ws.send("Hello, WebSocket!");
       });
@@ -202,38 +209,11 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("Server-Sent Events", async () => {
-    const testPort = getRandomPort();
-
-    const sseHandler = async (event) => {
-      if (event.request.url.endsWith("/sse")) {
-        const headers = new Headers({
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        });
-
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            const data = createServerSentEvent(
-              { message: "Hello SSE" },
-              "update"
-            );
-            controller.enqueue(encoder.encode(data));
-            controller.close();
-          },
-        });
-        const response = new Response(stream, { headers });
-
-        event.respondWith(response);
-      }
-    };
-
+    // TODO: can I use an EventSource Polyfill?
+    const port = getRandomPort();
     addEventListener("fetch", sseHandler);
-
-    const server = await start({ port: testPort });
-
-    const response = await fetch(`http://localhost:${testPort}/sse`);
+    const server = await start({ port });
+    const response = await fetch(`http://localhost:${port}/sse`);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("Content-Type"), "text/event-stream");
     const reader = response.body.getReader();
@@ -243,7 +223,6 @@ VyyNz/1TUWii+PL9b9yswag=
       eventData,
       /^event: update\ndata: {"message":"Hello SSE"}\n\n$/
     );
-
     await stop(server);
     removeEventListener("fetch", sseHandler);
   });
@@ -262,15 +241,15 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("Error handling", async () => {
-    const testPort = getRandomPort();
+    const port = getRandomPort();
     const fetchHandler = () => {
       throw new Error("Test error");
     };
     addEventListener("fetch", fetchHandler);
-    const server = await start({ port: testPort });
+    const server = await start({ port });
     const { promise: error, resolve: errorHandler } = Promise.withResolvers();
     addEventListener("error", errorHandler);
-    const response = await fetch(`http://localhost:${testPort}`);
+    const response = await fetch(`http://localhost:${port}`);
     assert.equal(response.status, 500);
     assert.equal(await response.text(), "Internal Server Error");
     assert.equal((await error).message, "Test error");

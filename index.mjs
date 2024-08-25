@@ -147,8 +147,12 @@ const route = (method, path, handler) => {
 
 const createServerSentEvent = (data, event, id) => {
   let sseData = "";
-  if (event) sseData += `event: ${event}\n`;
-  if (id) sseData += `id: ${id}\n`;
+  if (event) {
+    sseData += `event: ${event}\n`;
+  }
+  if (id) {
+    sseData += `id: ${id}\n`;
+  }
   sseData += `data: ${JSON.stringify(data)}\n\n`;
   return sseData;
 };
