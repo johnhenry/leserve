@@ -8,6 +8,4 @@ const PORT = 8080;
 const handler = await import(join(dir, HANDLER_LOCATION)).then(
   (module) => module[EXPORT]
 );
-console.log({ port: PORT }, handler);
-
 serve({ port: PORT }, handler);

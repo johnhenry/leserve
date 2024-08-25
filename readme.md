@@ -228,7 +228,7 @@ route("GET", "/hello/:name", async (req, params) => {
 });
 
 route("POST", "/echo", async (req) => {
-  const body = await req.json();
+  const body = await req.mjson();
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: { "Content-Type": "application/json" },
@@ -280,6 +280,115 @@ addEventListener("fetch", async (event) => {
   }
 });
 ```
+
+## Usage: CLI
+
+A flexible CLI tool for serving JavaScript modules with various options.
+
+### Installation
+
+```bash
+npm install -g serve-cold
+```
+
+### Usage
+
+```bash
+serve-cold <path-to-file> [options]
+```
+
+Or
+
+```bash
+npx serve-cold <path-to-file> [options]
+```
+
+#### Options
+
+- `-p, --port <port>`: Specify the port number (default: 8000)
+- `-e, --export <name>`: Specify the export name to use (default: 'default')
+- `-E, --events`: Enable events mode
+
+### Default Behavior
+
+By default, `serve-cold` serves the default export from the specified file at `localhost:8000` using `./serve.mjs`.
+
+Example:
+
+```javascript
+// myHandler.mjs
+export default (request) => {
+  return new Response("Default Handler", {
+    headers: {
+      "content-type": "text/plain",
+    },
+  });
+};
+```
+
+```bash
+serve-cold myHandler.mjs
+```
+
+This serves the default export from `myHandler.mjs` at `localhost:8000`.
+
+#### Port Flag
+
+You can specify a custom port using the `-p` or `--port` flag:
+
+```bash
+serve-cold myHandler.mjs -p 8001
+```
+
+This serves the default export from `myHandler.mjs` at `localhost:8001`.
+
+#### Export Flag
+
+You can choose an alternative export with the `-e` or `--export` flag:
+
+```javascript
+// myHandlers.mjs
+export const handler = (request) => {
+  return new Response("Named Handler", {
+    headers: {
+      "content-type": "text/plain",
+    },
+  });
+};
+```
+
+```bash
+serve-cold myHandlers.mjs -p 8080 -e handler
+```
+
+This serves the export named 'handler' from `myHandlers.mjs` at `localhost:8080`.
+
+### Events Mode
+
+Using the `-E` or `--events` flag causes the server respond to events using `./controls.mjs` and `./event.mjs`.
+
+Example:
+
+```javascript
+// myEventHandler.mjs
+addEventListener("fetch", async (event) => {
+  event.respondWith(new Response("Event!"));
+});
+```
+
+```bash
+serve-cold myEventHandler.mjs -E
+```
+
+This listens for events at `localhost:8000`.
+
+You can still use the port flag in events mode:
+
+```bash
+serve-cold myEventHandler.mjs -E -p 8080
+```
+
+This listens for events at `localhost:8080`.
 
 ## Notes
 
