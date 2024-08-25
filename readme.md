@@ -1,8 +1,8 @@
 # Serve Cold ❄️
 
-"HTTP is a dish best best served co... wait a minute... does that make sense?"
+"HTTP is a dish best best serve co... wait a minute... does that make sense?"
 
-[![npm version](https://badge.fury.io/js/served-cold.svg)](https://badge.fury.io/js/served-cold)
+[![npm version](https://badge.fury.io/js/serve-cold.svg)](https://badge.fury.io/js/serve-cold)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <img alt="" width="512" height="512" src="./sc.jpeg" style="width:512px;height:512px"/>
@@ -12,7 +12,7 @@ A simple HTTP server with support for modern JavaScript features.
 ## Installation
 
 ```bash
-npm install served-cold
+npm install serve-cold
 ```
 
 ## Usage: serve
@@ -20,7 +20,7 @@ npm install served-cold
 (See similar: [Deno.serve](https://docs.deno.com/api/deno/~/Deno.serve))
 
 ```javascript
-import serve from "served-cold/serve";
+import serve from "serve-cold/serve";
 
 const handler = (request) => {
   return new Response("Hello, World!", {
@@ -55,8 +55,8 @@ The handler function receives a `Request` object and should return a `Response` 
 (See similar: [WinterJS](https://github.com/wasmerio/winterjs))
 
 ```javascript
-import "served-cold/events";
-import { start } from "served-cold/controls";
+import "serve-cold/events";
+import { start } from "serve-cold/controls";
 start({ port: 3000 });
 addEventListener("fetch", (event) => {
   event.respondWith(new Response("Hello, World!", { status: 200 }));
