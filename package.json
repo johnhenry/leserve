@@ -1,0 +1,19 @@
+{
+  "name": "event-listener-server",
+  "version": "0.0.1",
+  "description": "A powerful, flexible HTTP/HTTPS server implementation for Node.js that closely mimics web browser APIs while providing additional features like WebSockets, Server-Sent Events, middleware, and routing.",
+  "main": "index.mjs",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test.mjs"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "theres-waldo": "^0.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "undici": "^6.19.8"
+  }
+}
