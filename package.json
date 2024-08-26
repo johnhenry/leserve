@@ -1,6 +1,6 @@
 {
   "name": "serve-cold",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "A powerful, flexible HTTP/HTTPS server implementation for Node.js that closely mimics web browser APIs while providing additional features like WebSockets, Server-Sent Events, middleware, and routing.",
   "main": "serve.mjs",
   "repository": {
