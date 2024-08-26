@@ -36,7 +36,7 @@ const options = {
 const { values, positionals } = parseArgs({ options, allowPositionals: true });
 
 if (!values.echo && positionals.length !== 1) {
-  console.error("Usage: cold-serve <path-to-file> [options]");
+  console.error("Usage: leserve <path-to-file> [options]");
   process.exit(1);
 }
 

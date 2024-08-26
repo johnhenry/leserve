@@ -1,18 +1,18 @@
-# Serve Cold ❄️
+# LeServe
 
-"HTTP is a dish best best serve co... wait a minute... does that make sense?"
-
-[![npm version](https://badge.fury.io/js/serve-cold.svg)](https://badge.fury.io/js/serve-cold)
+[![npm version](https://badge.fury.io/js/leserve.svg)](https://badge.fury.io/js/leserve)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-<img alt="" width="512" height="512" src="./sc.jpeg" style="width:512px;height:512px"/>
+<img alt="" width="512" height="512" src="./logo.jpeg" style="width:512px;height:512px"/>
 
 A simple HTTP server with support for modern JavaScript features.
+
+LeServe works greate with [LeRoute](https://www.npmjs.com/package/leroute), a library for routing requests.
 
 ## Installation
 
 ```bash
-npm install serve-cold
+npm install leserve
 ```
 
 ## Usage: serve
@@ -20,7 +20,7 @@ npm install serve-cold
 (See similar: [Deno.serve](https://docs.deno.com/api/deno/~/Deno.serve))
 
 ```javascript
-import serve from "serve-cold/serve";
+import serve from "leserve/serve";
 
 const handler = (request) => {
   return new Response("Hello, World!", {
@@ -55,8 +55,8 @@ The handler function receives a `Request` object and should return a `Response` 
 (See similar: [WinterJS](https://github.com/wasmerio/winterjs))
 
 ```javascript
-import "serve-cold/events";
-import { start } from "serve-cold/controls";
+import "leserve/events";
+import { start } from "leserve/controls";
 start({ port: 3000 });
 addEventListener("fetch", (event) => {
   event.respondWith(new Response("Hello, World!", { status: 200 }));
@@ -290,19 +290,19 @@ A flexible CLI tool for serving JavaScript modules with various options.
 ### Installation
 
 ```bash
-npm install -g serve-cold
+npm install -g leserve
 ```
 
 ### Usage
 
 ```bash
-serve-cold <path-to-file> [options]
+leserve <path-to-file> [options]
 ```
 
 Or
 
 ```bash
-npx serve-cold <path-to-file> [options]
+npx leserve <path-to-file> [options]
 ```
 
 #### Options
@@ -314,7 +314,7 @@ npx serve-cold <path-to-file> [options]
 
 ### Default Behavior
 
-By default, `serve-cold` serves the default export from the specified file at `localhost:8000` using `./serve.mjs`.
+By default, `leserve` serves the default export from the specified file at `localhost:8000` using `./serve.mjs`.
 
 Example:
 
@@ -330,7 +330,7 @@ export default (request) => {
 ```
 
 ```bash
-serve-cold myHandler.mjs
+leserve myHandler.mjs
 ```
 
 This serves the default export from `myHandler.mjs` at `localhost:8000`.
@@ -340,7 +340,7 @@ This serves the default export from `myHandler.mjs` at `localhost:8000`.
 You can specify a custom port using the `-p` or `--port` flag:
 
 ```bash
-serve-cold myHandler.mjs -p 8001
+leserve myHandler.mjs -p 8001
 ```
 
 This serves the default export from `myHandler.mjs` at `localhost:8001`.
@@ -361,7 +361,7 @@ export const handler = (request) => {
 ```
 
 ```bash
-serve-cold myHandlers.mjs -p 8080 -e handler
+leserve myHandlers.mjs -p 8080 -e handler
 ```
 
 This serves the export named 'handler' from `myHandlers.mjs` at `localhost:8080`.
@@ -380,7 +380,7 @@ addEventListener("fetch", async (event) => {
 ```
 
 ```bash
-serve-cold myEventHandler.mjs -E
+leserve myEventHandler.mjs -E
 ```
 
 This listens for events at `localhost:8000`.
@@ -388,7 +388,7 @@ This listens for events at `localhost:8000`.
 You can still use the port flag in events mode:
 
 ```bash
-serve-cold myEventHandler.mjs -E -p 8080
+leserve myEventHandler.mjs -E -p 8080
 ```
 
 This listens for events at `localhost:8080`.
@@ -398,7 +398,7 @@ This listens for events at `localhost:8080`.
 Using the `-E` or `--events` flag causes the server to respond as an echo server.
 
 ```bash
-serve-cold --echo
+leserve --echo
 ```
 
 echos back requests as responses in JSON format on port 8000.

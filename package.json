@@ -1,11 +1,11 @@
 {
-  "name": "serve-cold",
+  "name": "leserve",
   "version": "0.0.0",
   "description": "A powerful, flexible HTTP/HTTPS server implementation for Node.js that closely mimics web browser APIs while providing additional features like WebSockets, Server-Sent Events, middleware, and routing.",
   "main": "serve.mjs",
   "repository": {
     "type": "git",
-    "url": "https://github.com/johnhenry/serve-cold"
+    "url": "https://github.com/johnhenry/leserve"
   },
   "type": "module",
   "scripts": {
@@ -14,7 +14,7 @@
     "demo:events": "node demo/events.mjs"
   },
   "bin": {
-    "serve-cold": "serve-cold.mjs"
+    "leserve": "leserve.mjs"
   },
   "keywords": [
     "http",
