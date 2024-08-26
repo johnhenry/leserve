@@ -1,5 +1,8 @@
 # Serve Cold ❄️
 
+> [!WARNING]
+> Serve cold has been deprecated in favor of [LeServe](https://www.npmjs.com/package/leserve)
+
 "HTTP is a dish best best serve co... wait a minute... does that make sense?"
 
 [![npm version](https://badge.fury.io/js/serve-cold.svg)](https://badge.fury.io/js/serve-cold)
