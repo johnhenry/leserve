@@ -403,6 +403,123 @@ leserve --echo
 
 echos back requests as responses in JSON format on port 8000.
 
+## Node-to-Web Conversion
+
+```js
+import { toWebResponse } from 'leserve/node-to-web';
+
+// Convert a Node.js IncomingMessage + body Buffer to a Web API Response
+const response = toWebResponse(incomingMessage, bodyBuffer);
+```
+
+### `toWebResponse(incomingMessage, bodyBuffer)`
+
+Converts a Node.js `IncomingMessage` and body `Buffer` into a standard Web API `Response` object.
+
+## Body Parsing & Response Helpers
+
+```js
+import { json, text, form, buffer, respond, error, redirect } from "leserve/body";
+```
+
+### Request Parsing
+
+```js
+const handler = async (request) => {
+  const data = await json(request);              // parse JSON body
+  const body = await text(request, { limit: 1024 }); // with size limit
+  const formData = await form(request);          // parse FormData
+  const raw = await buffer(request);             // parse ArrayBuffer
+};
+```
+
+The `limit` option (bytes) throws with `{ status: 413 }` when exceeded.
+
+### Response Helpers
+
+```js
+respond({ ok: true })               // → 200 JSON response
+respond({ id: 1 }, { status: 201 }) // → 201 JSON response
+error("Not found", 404)             // → 404 JSON error
+redirect("/login")                  // → 302 redirect
+```
+
+## Authentication Middleware
+
+```js
+import { basicAuth, bearerAuth, apiKeyAuth } from "leserve/auth";
+```
+
+Each factory takes a validation function and returns a handler wrapper:
+
+```js
+const requireAuth = bearerAuth(async (token) => token === process.env.SECRET);
+const handler = requireAuth((request) => respond({ ok: true }));
+```
+
+### `basicAuth(validate)`
+
+```js
+basicAuth(async (username, password, request) => {
+  return username === "admin" && password === "secret";
+});
+```
+
+### `bearerAuth(validate)`
+
+```js
+bearerAuth(async (token, request) => {
+  return token === process.env.API_TOKEN;
+});
+```
+
+### `apiKeyAuth(validate, options?)`
+
+```js
+apiKeyAuth(async (key, request) => {
+  return key === process.env.API_KEY;
+}, { header: "x-api-key" }); // default header
+```
+
+## Test Harness
+
+```js
+import { testHandler } from "leserve/test-harness";
+```
+
+Test `(Request) => Response` handlers without starting a server:
+
+```js
+import { describe, it } from "node:test";
+import assert from "node:assert";
+
+const app = testHandler(myHandler);
+
+const res = await app.get("/users");
+assert.strictEqual(res.status, 200);
+
+const res2 = await app.post("/users", { name: "Ada" });
+const body = await res2.json();
+assert.strictEqual(body.name, "Ada");
+```
+
+Methods: `app.get()`, `app.head()`, `app.post()`, `app.put()`, `app.patch()`, `app.delete()`.
+
+Objects and strings are auto-serialized with the appropriate `content-type`.
+
+## Exports
+
+| Export | Description |
+|--------|-------------|
+| `leserve` or `leserve/serve` | `serve(handler, options?)` — Handler-based server |
+| `leserve/event` | Event-based API (WinterJS-style) |
+| `leserve/controls` | `start`, `stop`, `use`, `route` |
+| `leserve/genport` | Random port generation |
+| `leserve/node-to-web` | `toWebResponse` — Node IncomingMessage to Web Response |
+| `leserve/body` | `json`, `text`, `form`, `buffer`, `respond`, `error`, `redirect` |
+| `leserve/auth` | `basicAuth`, `bearerAuth`, `apiKeyAuth` |
+| `leserve/test-harness` | `testHandler` — Test handlers without a server |
+
 ## License
 
 This project is licensed under the MIT License.

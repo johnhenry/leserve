@@ -37,6 +37,20 @@
     "./serve": "./serve.mjs",
     "./event": "./event.mjs",
     "./controls": "./controls.mjs",
-    "./genport": "./gen-random-port.mjs"
-  }
+    "./genport": "./gen-random-port.mjs",
+    "./body": "./body.mjs",
+    "./test-harness": "./test-harness.mjs",
+    "./auth": "./auth.mjs"
+  },
+  "files": [
+    "serve.mjs",
+    "controls.mjs",
+    "event.mjs",
+    "gen-random-port.mjs",
+    "body.mjs",
+    "test-harness.mjs",
+    "auth.mjs",
+    "README.md",
+    "LICENSE"
+  ]
 }

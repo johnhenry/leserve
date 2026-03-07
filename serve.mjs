@@ -1,6 +1,7 @@
 import http from "http";
 import https from "https";
 import { Readable } from "stream";
+import { WebSocketServer } from "ws";
 
 export const serve = (handlerOrOptions, maybeHandler) => {
   let options = {};
@@ -32,9 +33,22 @@ export const serve = (handlerOrOptions, maybeHandler) => {
     }
 
     const request = new Request(url.toString(), requestInit);
+    Object.defineProperty(request, "raw", { value: req, enumerable: false });
+
+    const context = {
+      remoteAddress: req.socket?.remoteAddress,
+      raw: req,
+      state: new Map(),
+    };
 
     try {
-      const response = await handler(request);
+      const response = await handler(request, context);
+
+      // Skip writing for WebSocket upgrades (status 101)
+      if (response.status === 101) {
+        return;
+      }
+
       res.statusCode = response.status;
 
       for (const [key, value] of response.headers) {
@@ -86,6 +100,51 @@ export const serve = (handlerOrOptions, maybeHandler) => {
     get finished() {
       return _finished;
     },
+    async [Symbol.asyncDispose]() {
+      server.close();
+      await _finished;
+    },
+  };
+};
+
+/**
+ * WebSocket middleware composable.
+ * Returns a middleware `(innerHandler) => composedHandler` that upgrades
+ * WebSocket requests and delegates everything else to the inner handler.
+ *
+ * @param {(ws: import('ws').WebSocket, request: Request, context?: object) => void} wsHandler
+ * @returns {(innerHandler: Function) => Function}
+ *
+ * @example
+ * const handler = onWebSocket((ws, req) => {
+ *   ws.on('message', (msg) => ws.send(`echo: ${msg}`));
+ * })(router);
+ * serve(handler, { port: 3000 });
+ */
+export const onWebSocket = (wsHandler) => {
+  const wss = new WebSocketServer({ noServer: true });
+
+  return (innerHandler) => {
+    // Attach the upgrade handler to the serve-level server
+    const composed = (request, context = {}) => {
+      const raw = request.raw || context.raw;
+      if (
+        raw &&
+        request.headers.get("upgrade")?.toLowerCase() === "websocket"
+      ) {
+        // Perform the upgrade using the raw Node.js request
+        const socket = raw.socket;
+        wss.handleUpgrade(raw, socket, Buffer.alloc(0), (ws) => {
+          wss.emit("connection", ws, raw);
+          wsHandler(ws, request, context);
+        });
+        // Return 101 so that serve knows not to write a response
+        return new Response(null, { status: 101 });
+      }
+      return innerHandler(request, context);
+    };
+    composed.fetch = composed;
+    return composed;
   };
 };
 
