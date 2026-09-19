@@ -12,8 +12,13 @@ LeServe works greate with [LeRoute](https://www.npmjs.com/package/leroute), a li
 ## Installation
 
 ```bash
-npm install leserve
+npm install @johnhenry/leserve
 ```
+
+> **Provenance:** previously published as unscoped `leserve@0.0.0`. Adopted
+> into the `@johnhenry` scope; version restarts at `0.0.0` there too (it
+> was already at 0.0.0 unscoped, so this isn't a downgrade -- just a new
+> home).
 
 ## Which API should I use?
 
