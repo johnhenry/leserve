@@ -1,0 +1,37 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.0.
+
+## [Unreleased]
+
+### Fixed
+
+- **Any unhandled route/middleware/fetch-event error crashed the whole process** (pre-existing, confirmed present before this changeset): `controls.mjs` emitted `"error"` on its internal `EventEmitter` with no default listener registered anywhere. Node specifically re-throws an `"error"` event that has no registered listener, so any thrown error in a `controls`/`event`-based app was a guaranteed process crash, not an edge case. Added a permanent no-op default listener.
+- **A single malformed request crashed the server**: request-target parsing (building the Web `Request` from Node's raw `IncomingMessage`) happened outside both `serve.mjs`'s and `controls.mjs`'s try/catch, so a request Node's HTTP parser lets through but `new URL()` rejects (e.g. a malformed request-target) threw uncaught and took down the process. Now caught and returns 400; also stopped silently falling back to hostname `"undefined"` when `Host` is missing.
+- **Multi-value response headers were silently dropped**: iterating a `Headers` object with repeated names (e.g. multiple `Set-Cookie` set via `.append()`) yields one pair per occurrence, but both servers wrote them through a mechanism that overwrites same-named entries — so only the last value of any repeated header ever reached the client.
+- **Stream errors mid-response crashed the process**: response bodies piped via `.pipe()` don't forward stream errors, so an upstream `ReadableStream` error partway through a response crashed the process via an unhandled `'error'` event. Switched to `stream.pipeline()`.
+- Thrown errors' `.status` (e.g. the new 400 above, or `body.mjs`'s existing 413) were ignored in both servers' catch blocks and flattened to a generic 500.
+- **`body.mjs`'s `limit` option didn't actually limit anything**: `json()`/`text()` fully buffered the request body (`request.arrayBuffer()`) before ever checking the configured size limit, defeating the entire point of a limit for a DoS-sized payload. Rewrote to stream and count bytes, aborting as soon as the limit is exceeded.
+- `auth.mjs`: a malformed (non-base64) `Authorization: Basic` header made `atob()` throw, surfacing as a 500 instead of a 401; a colon-less decoded payload was also silently mis-sliced. Both paths now correctly return 401.
+- **`gen-random-port.mjs` could hand back a port already in use**: it blindly guessed a random port with zero collision checking, which produced real `EADDRINUSE`-class collisions under concurrent use. Rewrote to bind port 0 and read back the OS-assigned port.
+- `serve(handler, options)` silently dropped `options` when the handler was passed first — meaning the README's own primary usage example never actually honored `port`. `serve()` now accepts both `(handler, options)` and `(options, handler)` argument orders.
+- `onWebSocket()` built `new Response(null, { status: 101 })` to signal "don't write a body" on upgrade, but the Fetch spec's `Response` constructor rejects status 101 — every WebSocket upgrade crashed the handler. Now returns a plain `{ status: 101 }` sentinel, which is all `serve()`'s dispatcher actually reads.
+- `package.json`'s `bin.leserve` pointed at a nonexistent `leserve.mjs`; fixed to point at the real CLI file, `serve-cold.mjs`. Added `serve-cold.mjs`, `compose.mjs`, and `lib/` to the `files` array (previously silently omitted from `npm pack`/`publish`); added a `./compose` exports entry (existed but was undocumented/unexported).
+- Fixed a real hang in the test suite: server-backed tests weren't guaranteed to run their cleanup (`stop()`) on assertion failure, and combined with an inherent connect-before-listen race, an occasional failure under load could skip cleanup and hang `npm test` forever. Also fixed the underlying HTTPS test that was throwing before its own cleanup ran (mismatched `undici` versions between the imported `Agent` and the global `fetch`).
+- `leserve/events` (a typo in the README) corrected to the real subpath, `leserve/event`.
+
+### Changed
+
+- De-duplicated the Node `IncomingMessage` → Web `Request` conversion, previously copy-pasted near-verbatim in both `serve.mjs` and `controls.mjs`, into a shared `lib/node-request.mjs`.
+
+### Added
+
+- `test-serve.mjs`: real test coverage for `serve.mjs`, `body.mjs`, `auth.mjs`, and `compose.mjs`, none of which had any direct tests before.
+- README: a "Which API should I use?" section contrasting `serve()` (recommended default) with `controls`/`event` (batteries-included); documentation for `onWebSocket()` and `compose()` (previously undocumented); corrected the "Global Types" section (`Request`/`Response`/etc. are plain Node globals, not something leserve adds — only `leserve/event` actually adds `addEventListener`/`removeEventListener`).
+
+### Removed
+
+- README docs for a `leserve/node-to-web` / `toWebResponse` export that never existed anywhere in this repo's git history.
