@@ -7,6 +7,10 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Removed
+
+- **`controls.mjs` + `event.mjs` (the `leserve/controls`/`leserve/event` API) have moved to a new, separate package, [`@johnhenry/servant`](https://github.com/johnhenry/servant).** This package's README and this CHANGELOG had already been framing `controls`/`event` as a "separate, incompatible" server implementation living alongside the recommended `serve()` for several releases — this makes that split real at the package boundary. `serve()` (this package's `main`/`.` export) is now the only server implementation `leserve` ships. The `./controls` and `./event` `exports` entries, and the `--events`/`-E` CLI flag (`serve-cold.mjs`'s `caseEvents()`), are gone; `@johnhenry/servant` depends on `leserve` only for `leserve/node-request`, which is unaffected. If you were using `controls`/`event`, install `@johnhenry/servant` and update your imports from `leserve/controls`/`leserve/event` to `@johnhenry/servant`/`@johnhenry/servant/event`.
+
 ### Fixed
 
 - **Any unhandled route/middleware/fetch-event error crashed the whole process** (pre-existing, confirmed present before this changeset): `controls.mjs` emitted `"error"` on its internal `EventEmitter` with no default listener registered anywhere. Node specifically re-throws an `"error"` event that has no registered listener, so any thrown error in a `controls`/`event`-based app was a guaranteed process crash, not an edge case. Added a permanent no-op default listener.

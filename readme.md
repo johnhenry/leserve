@@ -17,29 +17,16 @@ npm install leserve
 
 ## Which API should I use?
 
-leserve ships **two independent, incompatible server implementations** in one package. They are not coequal flavors of the same thing — pick one per project/entry-point.
-
-### `serve()` — recommended default
-
-Use `leserve` / `leserve/serve` if you're bringing your own router (e.g. [LeRoute](https://www.npmjs.com/package/leroute)) and want a thin, composable `(Request) => Response` handler runner, in the spirit of [`Deno.serve`](https://docs.deno.com/api/deno/~/Deno.serve).
-
-- One `serve(handler)` call turns any `(Request, context?) => Response` function into a running HTTP(S) server.
-- `leserve/auth` (`basicAuth`/`bearerAuth`/`apiKeyAuth`), `leserve/compose`, and `onWebSocket()` are all built around this exact `(Request) => Response` shape, so they compose together directly with each other and with your router.
-- No built-in routing — bring your own router, or branch on `new URL(request.url)` yourself.
-
-**This is the primary API and the recommended default for new code.**
-
-### `controls` / `event` — batteries-included alternative
-
-Use `leserve/controls` + `leserve/event` if you want a self-contained server with built-in routing (`route()`), middleware (`use()`), and WebSocket handling (`addEventListener("websocket", ...)`) without pulling in a separate router library — in the spirit of service-worker-style `addEventListener("fetch", ...)` (see [WinterJS](https://github.com/wasmerio/winterjs)).
-
-- `start()`/`stop()` manage the server lifecycle; requests are dispatched through `addEventListener("fetch", (event) => event.respondWith(...))`, `route()`, and `use()`.
-- WebSockets are wired up automatically via a built-in `WebSocketServer` attached to the server — no separate composable needed, just `addEventListener("websocket", (ws) => ...)`.
-- `leserve/auth`, `leserve/compose`, and `onWebSocket()` are **not** designed for this path — they assume the `(Request) => Response` handler shape from `serve()`, not the event/middleware model used here.
-
-### Compatibility note
-
-`serve()` and `controls`/`event` are separate server implementations with separate request-handling pipelines. Don't `start()` a `controls` server and call `serve()` in the same process expecting them to interoperate or share middleware/state — run one model per server instance.
+`leserve` ships one API: `serve()`, described below. If you want a
+self-contained, batteries-included server instead — with built-in routing,
+middleware, and WebSocket handling dispatched through a service-worker-style
+`addEventListener("fetch", ...)` API — see
+[`@johnhenry/servant`](https://github.com/johnhenry/servant), a separate
+package extracted from what used to be `leserve/controls` + `leserve/event`.
+`servant` depends on `leserve` only for `leserve/node-request`; the two are
+otherwise independent server implementations and don't interoperate — don't
+`start()` a `servant` server and call this package's `serve()` in the same
+process expecting them to share middleware/state.
 
 ## Usage: serve
 
@@ -107,238 +94,11 @@ serve(handler, { port: 3000 });
 - `wsHandler(ws, request, context)` is called once per established connection with the [`ws`](https://www.npmjs.com/package/ws) `WebSocket` instance, the original upgrade `Request`, and the handler `context`.
 - Because it follows the same `(innerHandler) => handler` shape as other `serve()` middleware, it composes with `compose()`, `leserve/auth`, and your own router just like anything else.
 
-## Usage: events + controls
-
-(See similar: [WinterJS](https://github.com/wasmerio/winterjs))
-
-```javascript
-import "leserve/event";
-import { start } from "leserve/controls";
-start({ port: 3000 });
-addEventListener("fetch", (event) => {
-  event.respondWith(new Response("Hello, World!", { status: 200 }));
-});
-```
-
-## Features
-
-### Event Listeners
-
-- `addEventListener(event, handler)`: Add an event listener
-- `removeEventListener(event, handler)`: Remove an event listener
-
-Available events:
-
-| Event     | Description                                            |
-| --------- | ------------------------------------------------------ |
-| fetch     | Emitted for handling HTTP requests                     |
-| start     | Emitted when the server starts                         |
-| stop      | Emitted when the server stops                          |
-| error     | Emitted when a server error occurs                     |
-| request   | Emitted for every incoming request                     |
-| websocket | Emitted when a new WebSocket connection is established |
-
-### Server Control
-
-- `start(options)`: Start the server
-- `stop()`: Stop the server
-- `emit(event, ...args)`: Emit a custom event
-
-### Middleware
-
-```javascript
-use(async (req, res) => {
-  console.log(`[Middleware] ${req.method} ${req.url}`);
-  return req;
-});
-```
-
-### Routing
-
-```javascript
-route("GET", "/hello/:name", async (req, params) => {
-  return new Response(`Hello, ${params.name}!`, { status: 200 });
-});
-```
-
-### WebSockets
-
-```javascript
-addEventListener("websocket", (ws) => {
-  ws.on("message", (message) => {
-    console.log("Received:", message);
-    ws.send(`Echo: ${message}`);
-  });
-});
-```
-
-### Server-Sent Events
-
-```javascript
-addEventListener("fetch", async (event) => {
-  if (event.request.url.endsWith("/sse")) {
-    const headers = new Headers({
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    });
-    const response = new Response(null, { headers });
-
-    const stream = new ReadableStream({
-      start(controller) {
-        setInterval(() => {
-          const event = createServerSentEvent(
-            { time: new Date().toISOString() },
-            "update"
-          );
-          controller.enqueue(event);
-        }, 1000);
-      },
-    });
-
-    response.body = stream;
-    event.respondWith(response);
-  }
-});
-```
-
 ## API Reference
-
-### Server Options
-
-```typescript
-type ServerOptions = {
-  port: number;
-  https?: {
-    key: string;
-    cert: string;
-  };
-};
-```
-
-### Middleware Function
-
-```typescript
-type MiddlewareFunction = (
-  req: Request,
-  res: Response
-) => Promise<Request | Response | void>;
-```
-
-### Route Handler
-
-```typescript
-type RouteHandler = (
-  req: Request,
-  params: Record<string, string>
-) => Promise<Response>;
-```
-
-### Global Functions
-
-- `addEventListener(event: string, handler: Function): void`
-- `removeEventListener(event: string, handler: Function): void`
-
-### Controls
-
-- `start(options: ServerOptions): Promise<void>`
-- `stop(): Promise<void>`
-- `emit(event: string, ...args: any[]): boolean`
-- `use(middleware: MiddlewareFunction): void`
-- `route(method: string, path: string, handler: RouteHandler): void`
-- `createServerSentEvent(data: any, event?: string, id?: string): string`
 
 ### Global Types
 
-`Request`, `Response`, `Headers`, `URL`, `URLSearchParams`, and (in modern Node.js) `WebSocket` are standard Node.js runtime globals (Node 18+) — they're available whether you use `serve()` or `controls`/`event`, and leserve doesn't add or polyfill them.
-
-What `leserve/event` *does* add to `globalThis` — and only when you `import "leserve/event"` — are:
-
-- `addEventListener(event: string, handler: Function): void`
-- `removeEventListener(event: string, handler: Function): void`
-
-These two are exclusive to the `controls`/`event` path. Under `serve()`, register hooks directly (`onListen` in `serve()`'s options) or via middleware (`compose()`, `onWebSocket()`) instead — see [Which API should I use?](#which-api-should-i-use).
-
-## Examples
-
-### Starting an HTTPS Server
-
-```javascript
-import fs from "fs";
-
-const httpsOptions = {
-  key: fs.readFileSync("path/to/key.pem"),
-  cert: fs.readFileSync("path/to/cert.pem"),
-};
-
-start({ port: 3000, https: httpsOptions });
-```
-
-### Using Middleware and Routing
-
-```javascript
-use(async (req, res) => {
-  console.log(`[Middleware] ${req.method} ${req.url}`);
-  return req;
-});
-
-route("GET", "/hello/:name", async (req, params) => {
-  return new Response(`Hello, ${params.name}!`, { status: 200 });
-});
-
-route("POST", "/echo", async (req) => {
-  const body = await req.json();
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-});
-```
-
-### WebSocket Echo Server
-
-```javascript
-addEventListener("websocket", (ws) => {
-  console.log("New WebSocket connection");
-  ws.on("message", (message) => {
-    console.log("Received:", message);
-    ws.send(`Echo: ${message}`);
-  });
-});
-```
-
-### Server-Sent Events
-
-```javascript
-addEventListener("fetch", async (event) => {
-  if (event.request.url.endsWith("/sse")) {
-    const headers = new Headers({
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    });
-    const response = new Response(null, { headers });
-    let counter = 0;
-
-    const stream = new ReadableStream({
-      start(controller) {
-        const interval = setInterval(() => {
-          const event = createServerSentEvent({ counter: counter++ }, "update");
-          controller.enqueue(event);
-        }, 1000);
-
-        setTimeout(() => {
-          clearInterval(interval);
-          controller.close();
-        }, 10000);
-      },
-    });
-
-    response.body = stream;
-    event.respondWith(response);
-  }
-});
-```
+`Request`, `Response`, `Headers`, `URL`, `URLSearchParams`, and (in modern Node.js) `WebSocket` are standard Node.js runtime globals (Node 18+) — they're available out of the box, and leserve doesn't add or polyfill them.
 
 ## Usage: CLI
 
@@ -366,7 +126,6 @@ npx leserve <path-to-file> [options]
 
 - `-p, --port <port>`: Specify the port number (default: 8000)
 - `-e, --export <name>`: Specify the export name to use (default: 'default')
-- `-E, --events`: Enable events mode
 - `--echo`: Enable echo mode
 
 ### Default Behavior
@@ -423,36 +182,9 @@ leserve myHandlers.mjs -p 8080 -e handler
 
 This serves the export named 'handler' from `myHandlers.mjs` at `localhost:8080`.
 
-### Events Mode
-
-Using the `-E` or `--events` flag causes the server to respond to events using `./controls.mjs` and `./event.mjs`.
-
-Example:
-
-```javascript
-// myEventHandler.mjs
-addEventListener("fetch", async (event) => {
-  event.respondWith(new Response("Event!"));
-});
-```
-
-```bash
-leserve myEventHandler.mjs -E
-```
-
-This listens for events at `localhost:8000`.
-
-You can still use the port flag in events mode:
-
-```bash
-leserve myEventHandler.mjs -E -p 8080
-```
-
-This listens for events at `localhost:8080`.
-
 ### Echo Mode
 
-Using the `-E` or `--events` flag causes the server to respond as an echo server.
+Using the `--echo` flag causes the server to respond as an echo server.
 
 ```bash
 leserve --echo
@@ -577,8 +309,6 @@ Objects and strings are auto-serialized with the appropriate `content-type`.
 | Export | Description |
 |--------|-------------|
 | `leserve` or `leserve/serve` | `serve(handler, options?)`, `onWebSocket(wsHandler)` — Handler-based server (recommended default) |
-| `leserve/event` | Event-based API (WinterJS-style); adds `addEventListener`/`removeEventListener` to `globalThis` |
-| `leserve/controls` | `start`, `stop`, `use`, `route`, `emit`, `createServerSentEvent` |
 | `leserve/genport` | Random port generation |
 | `leserve/body` | `json`, `text`, `form`, `buffer`, `respond`, `error`, `redirect` |
 | `leserve/auth` | `basicAuth`, `bearerAuth`, `apiKeyAuth` — for the `serve()` model |

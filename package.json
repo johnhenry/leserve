@@ -9,9 +9,8 @@
   },
   "type": "module",
   "scripts": {
-    "test": "node --test --test-concurrency=1 test.mjs test-serve.mjs",
-    "demo:serve": "node demo/serve.mjs",
-    "demo:events": "node demo/events.mjs"
+    "test": "node --test --test-concurrency=1 test-serve.mjs",
+    "demo:serve": "node demo/serve.mjs"
   },
   "bin": {
     "leserve": "serve-cold.mjs"
@@ -35,8 +34,6 @@
   "exports": {
     ".": "./serve.mjs",
     "./serve": "./serve.mjs",
-    "./event": "./event.mjs",
-    "./controls": "./controls.mjs",
     "./genport": "./gen-random-port.mjs",
     "./body": "./body.mjs",
     "./test-harness": "./test-harness.mjs",
@@ -48,8 +45,6 @@
   },
   "files": [
     "serve.mjs",
-    "controls.mjs",
-    "event.mjs",
     "gen-random-port.mjs",
     "serve-cold.mjs",
     "body.mjs",

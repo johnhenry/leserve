@@ -3,7 +3,6 @@
 import { join } from "path";
 import { parseArgs } from "node:util";
 import serve from "./serve.mjs";
-import { start } from "./controls.mjs";
 
 const options = {
   port: {
@@ -15,11 +14,6 @@ const options = {
     type: "string",
     short: "e",
     default: "default",
-  },
-  events: {
-    type: "boolean",
-    short: "E",
-    default: false,
   },
   verbose: {
     type: "boolean",
@@ -42,20 +36,6 @@ if (!values.echo && positionals.length !== 1) {
 
 const filePath = join(process.cwd(), positionals[0] || "");
 const port = parseInt(values.port, 10);
-
-const caseEvents = async () => {
-  await import("./event.mjs");
-  if (values.verbose) {
-    addEventListener("start", ({ port, index }) => {
-      console.log(`Listening on port ${port}; index ${index}.`);
-    });
-    addEventListener("stop", ({ index }) => {
-      console.log(`Server with index ${index} stopped.`);
-    });
-  }
-  start({ port });
-  import(filePath);
-};
 
 const caseServe = async () => {
   let module;
@@ -86,7 +66,6 @@ const caseServe = async () => {
     }
     process.exit(1);
     return;
-    // caseEvents();
   }
 };
 
@@ -121,9 +100,5 @@ if (values.echo) {
     }
   );
 } else {
-  if (!values.events) {
-    caseServe();
-  } else {
-    caseEvents();
-  }
+  caseServe();
 }
