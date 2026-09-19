@@ -9,12 +9,12 @@
   },
   "type": "module",
   "scripts": {
-    "test": "node --test test.mjs",
+    "test": "node --test test.mjs test-serve.mjs",
     "demo:serve": "node demo/serve.mjs",
     "demo:events": "node demo/events.mjs"
   },
   "bin": {
-    "leserve": "leserve.mjs"
+    "leserve": "serve-cold.mjs"
   },
   "keywords": [
     "http",
@@ -40,16 +40,20 @@
     "./genport": "./gen-random-port.mjs",
     "./body": "./body.mjs",
     "./test-harness": "./test-harness.mjs",
-    "./auth": "./auth.mjs"
+    "./auth": "./auth.mjs",
+    "./compose": "./compose.mjs"
   },
   "files": [
     "serve.mjs",
     "controls.mjs",
     "event.mjs",
     "gen-random-port.mjs",
+    "serve-cold.mjs",
     "body.mjs",
+    "compose.mjs",
     "test-harness.mjs",
     "auth.mjs",
+    "lib/",
     "README.md",
     "LICENSE"
   ]

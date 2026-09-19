@@ -2,7 +2,12 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { Agent } from "undici";
+// Import `fetch` from the same `undici` version as `Agent` below. Node's
+// global `fetch` is backed by whatever undici is bundled with the running
+// Node version; passing an `Agent` from a *different* undici version as its
+// `dispatcher` throws `InvalidArgumentError: invalid onError method` because
+// the internal dispatcher shapes are incompatible across versions.
+import { Agent, fetch as undiciFetch } from "undici";
 import WebSocket from "ws";
 import genPort from "./gen-random-port.mjs";
 // Import the server implementation
@@ -125,7 +130,7 @@ VyyNz/1TUWii+PL9b9yswag=
     };
     const server = await start({ port, https: httpsOptions });
     await assert.doesNotReject(
-      fetch(`https://localhost:${port}`, {
+      undiciFetch(`https://localhost:${port}`, {
         dispatcher: new Agent({
           connect: {
             rejectUnauthorized: false,

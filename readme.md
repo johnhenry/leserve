@@ -15,6 +15,32 @@ LeServe works greate with [LeRoute](https://www.npmjs.com/package/leroute), a li
 npm install leserve
 ```
 
+## Which API should I use?
+
+leserve ships **two independent, incompatible server implementations** in one package. They are not coequal flavors of the same thing — pick one per project/entry-point.
+
+### `serve()` — recommended default
+
+Use `leserve` / `leserve/serve` if you're bringing your own router (e.g. [LeRoute](https://www.npmjs.com/package/leroute)) and want a thin, composable `(Request) => Response` handler runner, in the spirit of [`Deno.serve`](https://docs.deno.com/api/deno/~/Deno.serve).
+
+- One `serve(handler)` call turns any `(Request, context?) => Response` function into a running HTTP(S) server.
+- `leserve/auth` (`basicAuth`/`bearerAuth`/`apiKeyAuth`), `leserve/compose`, and `onWebSocket()` are all built around this exact `(Request) => Response` shape, so they compose together directly with each other and with your router.
+- No built-in routing — bring your own router, or branch on `new URL(request.url)` yourself.
+
+**This is the primary API and the recommended default for new code.**
+
+### `controls` / `event` — batteries-included alternative
+
+Use `leserve/controls` + `leserve/event` if you want a self-contained server with built-in routing (`route()`), middleware (`use()`), and WebSocket handling (`addEventListener("websocket", ...)`) without pulling in a separate router library — in the spirit of service-worker-style `addEventListener("fetch", ...)` (see [WinterJS](https://github.com/wasmerio/winterjs)).
+
+- `start()`/`stop()` manage the server lifecycle; requests are dispatched through `addEventListener("fetch", (event) => event.respondWith(...))`, `route()`, and `use()`.
+- WebSockets are wired up automatically via a built-in `WebSocketServer` attached to the server — no separate composable needed, just `addEventListener("websocket", (ws) => ...)`.
+- `leserve/auth`, `leserve/compose`, and `onWebSocket()` are **not** designed for this path — they assume the `(Request) => Response` handler shape from `serve()`, not the event/middleware model used here.
+
+### Compatibility note
+
+`serve()` and `controls`/`event` are separate server implementations with separate request-handling pipelines. Don't `start()` a `controls` server and call `serve()` in the same process expecting them to interoperate or share middleware/state — run one model per server instance.
+
 ## Usage: serve
 
 (See similar: [Deno.serve](https://docs.deno.com/api/deno/~/Deno.serve))
@@ -36,8 +62,10 @@ const server = serve(handler, { port: 3000 });
 
 #### `serve(handlerOrOptions, maybeHandler)`
 
-- `handlerOrOptions`: Either a handler function or an options object.
-- `maybeHandler`: If the first argument is an options object, this should be the handler function.
+Either argument order works:
+
+- `serve(handler, options?)` — handler first (shown above).
+- `serve(options, handler)` — options first, [`Deno.serve`](https://docs.deno.com/api/deno/~/Deno.serve)-style (used internally by the `leserve` CLI).
 
 ##### Options
 
@@ -45,17 +73,46 @@ const server = serve(handler, { port: 3000 });
 - `hostname`: Hostname (default: 'localhost')
 - `cert`: SSL certificate for HTTPS (optional)
 - `key`: SSL key for HTTPS (optional)
+- `signal`: An `AbortSignal`; aborting it calls `server.close()`
+- `onListen({ path, port })`: Called once the server is listening
 
 ##### Handler Function
 
-The handler function receives a `Request` object and should return a `Response` object or a Promise that resolves to a `Response` object.
+The handler function receives a `Request` object (and an optional `context` object — `{ remoteAddress, raw, state }`, where `state` is a fresh `Map` per request) and should return a `Response` object or a Promise that resolves to a `Response` object.
+
+##### Lifecycle hooks
+
+`onListen` (above) is currently the only lifecycle hook `serve()` exposes — there is no `onRequest`/`onResponse` hook. To intercept every request/response, wrap your handler with [`compose()`](#composefns) or write middleware directly in the `(innerHandler) => (request, ctx) => Response` shape used by `leserve/auth` and `onWebSocket()`.
+
+#### `onWebSocket(wsHandler)`
+
+A composable WebSocket-upgrade middleware for the `serve()` model — this is `serve.mjs`'s equivalent of `controls`'s built-in WebSocket support, kept explicit and opt-in rather than automatic.
+
+`onWebSocket` returns a middleware factory `(innerHandler) => composedHandler`: requests with an `Upgrade: websocket` header are upgraded and handed to `wsHandler`; every other request falls through to `innerHandler` unchanged.
+
+```javascript
+import serve, { onWebSocket } from "leserve/serve";
+
+const withWebSocket = onWebSocket((ws, request, context) => {
+  ws.on("message", (message) => {
+    ws.send(`echo: ${message}`);
+  });
+});
+
+const handler = withWebSocket((request) => new Response("Hello, World!"));
+
+serve(handler, { port: 3000 });
+```
+
+- `wsHandler(ws, request, context)` is called once per established connection with the [`ws`](https://www.npmjs.com/package/ws) `WebSocket` instance, the original upgrade `Request`, and the handler `context`.
+- Because it follows the same `(innerHandler) => handler` shape as other `serve()` middleware, it composes with `compose()`, `leserve/auth`, and your own router just like anything else.
 
 ## Usage: events + controls
 
 (See similar: [WinterJS](https://github.com/wasmerio/winterjs))
 
 ```javascript
-import "leserve/events";
+import "leserve/event";
 import { start } from "leserve/controls";
 start({ port: 3000 });
 addEventListener("fetch", (event) => {
@@ -193,14 +250,14 @@ type RouteHandler = (
 
 ### Global Types
 
-The following Web API types are made available globally:
+`Request`, `Response`, `Headers`, `URL`, `URLSearchParams`, and (in modern Node.js) `WebSocket` are standard Node.js runtime globals (Node 18+) — they're available whether you use `serve()` or `controls`/`event`, and leserve doesn't add or polyfill them.
 
-- `Request`
-- `Response`
-- `Headers`
-- `URL`
-- `URLSearchParams`
-- `WebSocket`
+What `leserve/event` *does* add to `globalThis` — and only when you `import "leserve/event"` — are:
+
+- `addEventListener(event: string, handler: Function): void`
+- `removeEventListener(event: string, handler: Function): void`
+
+These two are exclusive to the `controls`/`event` path. Under `serve()`, register hooks directly (`onListen` in `serve()`'s options) or via middleware (`compose()`, `onWebSocket()`) instead — see [Which API should I use?](#which-api-should-i-use).
 
 ## Examples
 
@@ -403,19 +460,6 @@ leserve --echo
 
 echos back requests as responses in JSON format on port 8000.
 
-## Node-to-Web Conversion
-
-```js
-import { toWebResponse } from 'leserve/node-to-web';
-
-// Convert a Node.js IncomingMessage + body Buffer to a Web API Response
-const response = toWebResponse(incomingMessage, bodyBuffer);
-```
-
-### `toWebResponse(incomingMessage, bodyBuffer)`
-
-Converts a Node.js `IncomingMessage` and body `Buffer` into a standard Web API `Response` object.
-
 ## Body Parsing & Response Helpers
 
 ```js
@@ -481,6 +525,27 @@ apiKeyAuth(async (key, request) => {
 }, { header: "x-api-key" }); // default header
 ```
 
+## Middleware Composition
+
+```js
+import { compose } from "leserve/compose";
+```
+
+Chain middleware and a base handler — all in the `(Request) => Response` shape used by `serve()` — into a single handler:
+
+```js
+const app = compose(withCache(), requireAuth, handler);
+serve(app, { port: 3000 });
+```
+
+### `compose(...fns)`
+
+- Each middleware has the signature `(next) => (request, ctx) => Response`.
+- The last argument is the base handler: `(request, ctx) => Response`.
+- Middleware run in the order passed, each wrapping the next, with the base handler innermost — the same composition order used by `onWebSocket()` and `leserve/auth`.
+
+Like `leserve/auth` and `onWebSocket()`, `compose()` is designed for the `serve()` model — see [Which API should I use?](#which-api-should-i-use).
+
 ## Test Harness
 
 ```js
@@ -511,14 +576,14 @@ Objects and strings are auto-serialized with the appropriate `content-type`.
 
 | Export | Description |
 |--------|-------------|
-| `leserve` or `leserve/serve` | `serve(handler, options?)` — Handler-based server |
-| `leserve/event` | Event-based API (WinterJS-style) |
-| `leserve/controls` | `start`, `stop`, `use`, `route` |
+| `leserve` or `leserve/serve` | `serve(handler, options?)`, `onWebSocket(wsHandler)` — Handler-based server (recommended default) |
+| `leserve/event` | Event-based API (WinterJS-style); adds `addEventListener`/`removeEventListener` to `globalThis` |
+| `leserve/controls` | `start`, `stop`, `use`, `route`, `emit`, `createServerSentEvent` |
 | `leserve/genport` | Random port generation |
-| `leserve/node-to-web` | `toWebResponse` — Node IncomingMessage to Web Response |
 | `leserve/body` | `json`, `text`, `form`, `buffer`, `respond`, `error`, `redirect` |
-| `leserve/auth` | `basicAuth`, `bearerAuth`, `apiKeyAuth` |
-| `leserve/test-harness` | `testHandler` — Test handlers without a server |
+| `leserve/auth` | `basicAuth`, `bearerAuth`, `apiKeyAuth` — for the `serve()` model |
+| `leserve/compose` | `compose(...fns)` — middleware composition for the `serve()` model |
+| `leserve/test-harness` | `testHandler` — Test `serve()`-style handlers without a server |
 
 ## License
 

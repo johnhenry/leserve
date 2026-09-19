@@ -3,6 +3,7 @@ import https from "node:https";
 import { WebSocketServer } from "ws";
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
+import { toWebRequest } from "./lib/node-request.mjs";
 
 const eventEmitter = new EventEmitter();
 
@@ -21,21 +22,8 @@ const servers = [];
 
 const start = async (options) => {
   const handler = async (req, res) => {
-    const url = new URL(req.url, `http://${req.headers.host}`);
+    const request = toWebRequest(req);
 
-    const requestInit = {
-      method: req.method,
-      headers: req.headers,
-    };
-
-    if (req.method !== "GET" && req.method !== "HEAD") {
-      requestInit.body = req;
-      requestInit.duplex = "half"; // Add this line
-    }
-
-    const request = new Request(url.toString(), requestInit);
-
-    // const request = new Request(req);
     let response;
 
     try {

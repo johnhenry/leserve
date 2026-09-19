@@ -2,15 +2,22 @@ import http from "http";
 import https from "https";
 import { Readable } from "stream";
 import { WebSocketServer } from "ws";
+import { toWebRequest } from "./lib/node-request.mjs";
 
 export const serve = (handlerOrOptions, maybeHandler) => {
   let options = {};
   let handler;
 
+  // Accept both `serve(options, handler)` (Deno.serve-style) and
+  // `serve(handler, options)` so the primary README example — which shows
+  // the handler first — actually works.
   if (typeof handlerOrOptions === "function") {
     handler = handlerOrOptions;
+    if (maybeHandler && typeof maybeHandler === "object") {
+      options = maybeHandler;
+    }
   } else {
-    options = handlerOrOptions;
+    options = handlerOrOptions || {};
     handler = maybeHandler;
   }
   if (!handler) {
@@ -20,20 +27,7 @@ export const serve = (handlerOrOptions, maybeHandler) => {
   const server =
     cert && key ? https.createServer({ cert, key }) : http.createServer();
   server.on("request", async (req, res) => {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-
-    const requestInit = {
-      method: req.method,
-      headers: req.headers,
-    };
-
-    if (req.method !== "GET" && req.method !== "HEAD") {
-      requestInit.body = req;
-      requestInit.duplex = "half"; // Add this line
-    }
-
-    const request = new Request(url.toString(), requestInit);
-    Object.defineProperty(request, "raw", { value: req, enumerable: false });
+    const request = toWebRequest(req, { attachRaw: true });
 
     const context = {
       remoteAddress: req.socket?.remoteAddress,
@@ -138,8 +132,15 @@ export const onWebSocket = (wsHandler) => {
           wss.emit("connection", ws, raw);
           wsHandler(ws, request, context);
         });
-        // Return 101 so that serve knows not to write a response
-        return new Response(null, { status: 101 });
+        // Signal status 101 so `serve()` knows not to write a response body
+        // (the socket has already been handed off for the upgrade). This is
+        // intentionally a plain object, not `new Response(null, { status:
+        // 101 })` — the Fetch spec's `Response` constructor rejects any
+        // status outside 200-599, so constructing a real Response with
+        // status 101 throws a RangeError. `serve()`'s dispatcher only reads
+        // `.status` before returning early, so a plain object satisfies the
+        // same contract without the illegal construction.
+        return { status: 101 };
       }
       return innerHandler(request, context);
     };
