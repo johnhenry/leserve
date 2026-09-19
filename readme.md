@@ -586,6 +586,7 @@ Objects and strings are auto-serialized with the appropriate `content-type`.
 | `leserve/test-harness` | `testHandler` — Test `serve()`-style handlers without a server |
 | `leserve/websocket` | `upgradeRawSocket(raw)`, `WEBSOCKET_UPGRADE_RESPONSE` — the low-level primitive `onWebSocket()` is sugar over, for a caller that wants to decide inline within a single request handler whether to upgrade |
 | `leserve/node-request` | `toWebRequest(req, options?)` — converts a raw Node `IncomingMessage` into a Web `Request`, the same conversion `serve()` itself uses |
+| `leserve/trailers` | `setTrailers(response, trailers)`, `getTrailers(response)` — HTTP trailers, which aren't part of the Fetch `Response` model; `serve()` sends them via `res.addTrailers()` after the body finishes |
 
 ## License
 

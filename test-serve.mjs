@@ -18,6 +18,7 @@ import WebSocket from "ws";
 import genPort from "./gen-random-port.mjs";
 import serve, { onWebSocket } from "./serve.mjs";
 import { upgradeRawSocket, WEBSOCKET_UPGRADE_RESPONSE } from "./lib/websocket.mjs";
+import { setTrailers } from "./lib/trailers.mjs";
 import { json, text, form, buffer } from "./body.mjs";
 import { basicAuth, bearerAuth, apiKeyAuth } from "./auth.mjs";
 import { compose } from "./compose.mjs";
@@ -237,6 +238,41 @@ describe("serve()", async () => {
         });
         ws.on("error", reject);
       });
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
+  });
+
+  await test("setTrailers()/getTrailers() -- trailers are sent after a streamed body, resolved from a Promise computed from the body itself", async () => {
+    const port = await genPort();
+    const handler = () => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("hello "));
+          controller.enqueue(new TextEncoder().encode("world"));
+          controller.close();
+        },
+      });
+      const response = new Response(stream, { headers: { "Content-Type": "text/plain" } });
+      // A Promise, not a resolved value -- exercises the "computed after
+      // the body" case (e.g. a running checksum), not just a static trailer.
+      setTrailers(response, Promise.resolve({ "X-Checksum": "deadbeef" }));
+      return response;
+    };
+
+    const server = await serveReady(handler, { port });
+    try {
+      const { body, trailers } = await new Promise((resolvePromise, reject) => {
+        const req = http.request(`http://localhost:${port}/`, (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => resolvePromise({ body: data, trailers: res.trailers }));
+        });
+        req.on("error", reject);
+        req.end();
+      });
+      assert.equal(body, "hello world");
+      assert.equal(trailers["x-checksum"], "deadbeef");
     } finally {
       await server[Symbol.asyncDispose]();
     }

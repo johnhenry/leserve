@@ -1,8 +1,10 @@
 import http from "http";
 import https from "https";
-import { Readable, pipeline } from "stream";
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 import { toWebRequest } from "./lib/node-request.mjs";
 import { upgradeRawSocket, WEBSOCKET_UPGRADE_RESPONSE } from "./lib/websocket.mjs";
+import { getTrailers } from "./lib/trailers.mjs";
 
 export const serve = (handlerOrOptions, maybeHandler) => {
   let options = {};
@@ -70,36 +72,64 @@ export const serve = (handlerOrOptions, maybeHandler) => {
         res.setHeader(key, values.length === 1 ? values[0] : values);
       }
 
+      // Trailers are only meaningful once the body is fully written, and
+      // `res.addTrailers()` must run before `res.end()`. `finishOk()` is
+      // the *success*-path completion for every body shape below --
+      // separate from error handling, which (as before this) destroys the
+      // connection and deliberately does not attempt to write trailers or
+      // call `res.end()` on an already-broken stream.
+      const trailersPromise = getTrailers(response);
+      const finishOk = async () => {
+        if (trailersPromise) {
+          const trailers = await trailersPromise;
+          // res.addTrailers() reads own-enumerable object keys -- a
+          // Headers instance has none (its entries live behind an
+          // iterator, not plain properties), so it must be converted to a
+          // plain object first or every trailer silently vanishes.
+          res.addTrailers(Object.fromEntries(new Headers(trailers).entries()));
+        }
+        res.end();
+      };
+
       if (response.body) {
         if (typeof response.body === "string") {
-          res.end(response.body);
+          res.write(response.body);
+          await finishOk();
         } else if (response.body instanceof Uint8Array) {
-          res.end(Buffer.from(response.body));
+          res.write(Buffer.from(response.body));
+          await finishOk();
         } else if (response.body instanceof ReadableStream) {
           // `.pipe()` does not forward source errors to the destination —
           // if the stream errors mid-response (e.g. an upstream fetch
           // failing after the response already started), the unhandled
           // 'error' event on the Readable crashes the whole process.
           // `pipeline()` wires up error propagation and destroys both
-          // sides for us.
-          pipeline(Readable.fromWeb(response.body), res, (err) => {
-            if (err) {
-              console.error("Error streaming response body:", err);
-              res.destroy(err);
-            }
-          });
+          // sides for us. `{ end: false }` (only supported by the
+          // Promise-returning `stream/promises` version -- the callback
+          // version's last positional argument must be the callback
+          // itself, not an options object) so `finishOk()` controls
+          // `res.end()`, giving trailers a chance to attach first.
+          try {
+            await pipeline(Readable.fromWeb(response.body), res, { end: false });
+            await finishOk();
+          } catch (err) {
+            console.error("Error streaming response body:", err);
+            res.destroy(err);
+          }
         } else if (typeof response.body.pipe === "function") {
-          pipeline(response.body, res, (err) => {
-            if (err) {
-              console.error("Error streaming response body:", err);
-              res.destroy(err);
-            }
-          });
+          try {
+            await pipeline(response.body, res, { end: false });
+            await finishOk();
+          } catch (err) {
+            console.error("Error streaming response body:", err);
+            res.destroy(err);
+          }
         } else {
-          res.end(String(response.body));
+          res.write(String(response.body));
+          await finishOk();
         }
       } else {
-        res.end();
+        await finishOk();
       }
     } catch (error) {
       console.error("Error handling request:", error);
