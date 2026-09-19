@@ -48,32 +48,68 @@ const sendRaw = (port, rawRequest) => {
     });
     let data = "";
     socket.on("data", (chunk) => (data += chunk.toString()));
-    socket.on("close", () => resolve(data));
-    socket.on("error", reject);
-    setTimeout(() => reject(new Error("timed out waiting for a response")), 5000);
+    socket.on("close", () => {
+      clearTimeout(timer);
+      resolve(data);
+    });
+    socket.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error("timed out waiting for a response"));
+    }, 5000);
+  });
+};
+
+/**
+ * Start a `serve()` server and resolve only once it's actually listening.
+ * `serve()` itself returns synchronously — `server.listen()` completes
+ * asynchronously in the background — so connecting immediately afterward
+ * (particularly via a raw socket, which has far less overhead than
+ * `fetch()` and can reach the OS before `listen()` has finished) can race
+ * a not-yet-listening server and fail with ECONNREFUSED under load.
+ */
+const serveReady = (handler, options) => {
+  let server;
+  return new Promise((resolve) => {
+    server = serve(handler, {
+      ...options,
+      onListen: (info) => {
+        options?.onListen?.(info);
+        resolve(server);
+      },
+    });
   });
 };
 
 describe("serve()", async () => {
   await test("starts and stops a server", async () => {
-    const port = genPort();
+    const port = await genPort();
     const server = serve((request) => new Response("ok"), { port });
-    await assert.doesNotReject(fetch(`http://localhost:${port}/`));
-    await server[Symbol.asyncDispose]();
+    try {
+      await assert.doesNotReject(fetch(`http://localhost:${port}/`));
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
     const closed = await isPortClosed(port);
     assert.ok(closed, `Port ${port} should be closed after disposing the server`);
   });
 
   await test("also accepts the (options, handler) call order", async () => {
-    const port = genPort();
+    const port = await genPort();
     const server = serve({ port }, () => new Response("ok"));
-    const res = await fetch(`http://localhost:${port}/`);
-    assert.equal(res.status, 200);
-    await server[Symbol.asyncDispose]();
+    try {
+      const res = await fetch(`http://localhost:${port}/`);
+      assert.equal(res.status, 200);
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
   });
 
   await test("basic handler round-trip: request in, response out", async () => {
-    const port = genPort();
+    const port = await genPort();
     const server = serve(
       async (request) => {
         const url = new URL(request.url);
@@ -88,24 +124,25 @@ describe("serve()", async () => {
       },
       { port }
     );
-
-    const res = await fetch(`http://localhost:${port}/hello`, {
-      method: "POST",
-      body: "payload",
-    });
-    assert.equal(res.status, 201);
-    const data = await res.json();
-    assert.deepEqual(data, {
-      method: "POST",
-      pathname: "/hello",
-      body: "payload",
-    });
-
-    await server[Symbol.asyncDispose]();
+    try {
+      const res = await fetch(`http://localhost:${port}/hello`, {
+        method: "POST",
+        body: "payload",
+      });
+      assert.equal(res.status, 201);
+      const data = await res.json();
+      assert.deepEqual(data, {
+        method: "POST",
+        pathname: "/hello",
+        body: "payload",
+      });
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
   });
 
   await test("onWebSocket() composes with an inner handler", async () => {
-    const port = genPort();
+    const port = await genPort();
     const fallback = () => new Response("not a websocket", { status: 200 });
     const handler = onWebSocket((ws) => {
       ws.on("message", (message) => {
@@ -114,72 +151,75 @@ describe("serve()", async () => {
     })(fallback);
 
     const server = serve(handler, { port });
+    try {
+      // Non-upgrade requests still fall through to the inner handler.
+      const res = await fetch(`http://localhost:${port}/`);
+      assert.equal(await res.text(), "not a websocket");
 
-    // Non-upgrade requests still fall through to the inner handler.
-    const res = await fetch(`http://localhost:${port}/`);
-    assert.equal(await res.text(), "not a websocket");
-
-    await new Promise((resolve, reject) => {
-      const ws = new WebSocket(`ws://localhost:${port}`);
-      ws.on("open", () => ws.send("hi"));
-      ws.on("message", (data) => {
-        try {
-          assert.equal(data.toString(), "echo: hi");
-          ws.close();
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
+      await new Promise((resolve, reject) => {
+        const ws = new WebSocket(`ws://localhost:${port}`);
+        ws.on("open", () => ws.send("hi"));
+        ws.on("message", (data) => {
+          try {
+            assert.equal(data.toString(), "echo: hi");
+            ws.close();
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        });
+        ws.on("error", reject);
       });
-      ws.on("error", reject);
-    });
-
-    await server[Symbol.asyncDispose]();
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
   });
 
   await test("a malformed request-target returns 400 instead of crashing the process", async () => {
-    const port = genPort();
-    const server = serve((request) => new Response("ok"), { port });
+    const port = await genPort();
+    const server = await serveReady((request) => new Response("ok"), { port });
+    try {
+      // A well-formed HTTP request line whose absolute-form target contains
+      // invalid IPv6-bracket syntax. Node's HTTP parser accepts this and
+      // hands it straight through as `req.url`, but the WHATWG `URL`
+      // constructor throws on it. Regression for: `toWebRequest()` used to
+      // be called *outside* the request handler's try/catch, so this single
+      // request crashed the entire process instead of getting an error
+      // response.
+      const response = await sendRaw(
+        port,
+        "GET http://[::1:bad/ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+      );
+      assert.match(response, /^HTTP\/1\.1 400 /);
 
-    // A well-formed HTTP request line whose absolute-form target contains
-    // invalid IPv6-bracket syntax. Node's HTTP parser accepts this and
-    // hands it straight through as `req.url`, but the WHATWG `URL`
-    // constructor throws on it. Regression for: `toWebRequest()` used to
-    // be called *outside* the request handler's try/catch, so this single
-    // request crashed the entire process instead of getting an error
-    // response.
-    const response = await sendRaw(
-      port,
-      "GET http://[::1:bad/ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
-    );
-    assert.match(response, /^HTTP\/1\.1 400 /);
-
-    // The process (and this server) must still be alive and serving.
-    const res = await fetch(`http://localhost:${port}/`);
-    assert.equal(res.status, 200);
-
-    await server[Symbol.asyncDispose]();
+      // The process (and this server) must still be alive and serving.
+      const res = await fetch(`http://localhost:${port}/`);
+      assert.equal(res.status, 200);
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
   });
 
   await test("repeated response headers (e.g. multiple Set-Cookie) are all sent, not just the last one", async () => {
-    const port = genPort();
-    const server = serve(() => {
+    const port = await genPort();
+    const server = await serveReady(() => {
       const headers = new Headers();
       headers.append("set-cookie", "a=1");
       headers.append("set-cookie", "b=2");
       return new Response("ok", { headers });
     }, { port });
-
-    const res = await fetch(`http://localhost:${port}/`);
-    // `Headers.getSetCookie()` gives back each Set-Cookie value distinctly.
-    assert.deepEqual(res.headers.getSetCookie().sort(), ["a=1", "b=2"]);
-
-    await server[Symbol.asyncDispose]();
+    try {
+      const res = await fetch(`http://localhost:${port}/`);
+      // `Headers.getSetCookie()` gives back each Set-Cookie value distinctly.
+      assert.deepEqual(res.headers.getSetCookie().sort(), ["a=1", "b=2"]);
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
   });
 
   await test("a response body stream that errors mid-response does not crash the process", async () => {
-    const port = genPort();
-    const server = serve(() => {
+    const port = await genPort();
+    const server = await serveReady(() => {
       const stream = new ReadableStream({
         start(controller) {
           controller.enqueue(new TextEncoder().encode("partial-"));
@@ -188,36 +228,38 @@ describe("serve()", async () => {
       });
       return new Response(stream, { status: 200 });
     }, { port });
+    try {
+      const res = await fetch(`http://localhost:${port}/`);
+      assert.equal(res.status, 200);
+      // The connection is terminated once the stream errors; reading the
+      // body to completion should reject rather than hang.
+      await assert.rejects(res.text());
 
-    const res = await fetch(`http://localhost:${port}/`);
-    assert.equal(res.status, 200);
-    // The connection is terminated once the stream errors; reading the
-    // body to completion should reject rather than hang.
-    await assert.rejects(res.text());
-
-    // The process (and this server) must still be alive and serving.
-    const ok = await fetch(`http://localhost:${port}/`).catch(() => null);
-    // The handler always errors on this route, but a *new* request must
-    // still be accepted and handled (not have crashed the process).
-    assert.ok(ok, "server must still accept new connections");
-
-    await server[Symbol.asyncDispose]();
+      // The process (and this server) must still be alive and serving.
+      const ok = await fetch(`http://localhost:${port}/`).catch(() => null);
+      // The handler always errors on this route, but a *new* request must
+      // still be accepted and handled (not have crashed the process).
+      assert.ok(ok, "server must still accept new connections");
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
   });
 
   await test("a 413 thrown by body.mjs's `limit` option surfaces as a real 413, not a generic 500", async () => {
-    const port = genPort();
-    const server = serve(async (request) => {
+    const port = await genPort();
+    const server = await serveReady(async (request) => {
       await json(request, { limit: 8 });
       return new Response("should not get here");
     }, { port });
-
-    const res = await fetch(`http://localhost:${port}/`, {
-      method: "POST",
-      body: JSON.stringify({ a: "x".repeat(100) }),
-    });
-    assert.equal(res.status, 413);
-
-    await server[Symbol.asyncDispose]();
+    try {
+      const res = await fetch(`http://localhost:${port}/`, {
+        method: "POST",
+        body: JSON.stringify({ a: "x".repeat(100) }),
+      });
+      assert.equal(res.status, 413);
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
   });
 });
 

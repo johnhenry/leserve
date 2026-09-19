@@ -9,7 +9,7 @@
   },
   "type": "module",
   "scripts": {
-    "test": "node --test test.mjs test-serve.mjs",
+    "test": "node --test --test-concurrency=1 test.mjs test-serve.mjs",
     "demo:serve": "node demo/serve.mjs",
     "demo:events": "node demo/events.mjs"
   },

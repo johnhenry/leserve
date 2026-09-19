@@ -58,9 +58,18 @@ const sendRaw = (port, rawRequest) => {
     });
     let data = "";
     socket.on("data", (chunk) => (data += chunk.toString()));
-    socket.on("close", () => resolve(data));
-    socket.on("error", reject);
-    setTimeout(() => reject(new Error("timed out waiting for a response")), 5000);
+    socket.on("close", () => {
+      clearTimeout(timer);
+      resolve(data);
+    });
+    socket.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error("timed out waiting for a response"));
+    }, 5000);
   });
 };
 
@@ -89,10 +98,13 @@ const sseHandler = (event) => {
 
 describe("Event Listener Server Tests", async () => {
   await test("Server start and stop", async () => {
-    const port = genPort();
+    const port = await genPort();
     const server = await start({ port });
-    await assert.doesNotReject(fetch(`http://localhost:${port}`));
-    await stop(server);
+    try {
+      await assert.doesNotReject(fetch(`http://localhost:${port}`));
+    } finally {
+      await stop(server);
+    }
     const isClosed = await isPortClosed(port);
     assert.ok(
       isClosed,
@@ -101,7 +113,7 @@ describe("Event Listener Server Tests", async () => {
   });
 
   await test("HTTPS server", async () => {
-    const port = genPort();
+    const port = await genPort();
     const httpsOptions = {
       key: `-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDYhAyKc91hGMeG
@@ -154,48 +166,56 @@ VyyNz/1TUWii+PL9b9yswag=
 -----END CERTIFICATE-----`,
     };
     const server = await start({ port, https: httpsOptions });
-    await assert.doesNotReject(
-      undiciFetch(`https://localhost:${port}`, {
-        dispatcher: new Agent({
-          connect: {
-            rejectUnauthorized: false,
-          },
-        }),
-      })
-    );
-    await stop(server);
+    try {
+      await assert.doesNotReject(
+        undiciFetch(`https://localhost:${port}`, {
+          dispatcher: new Agent({
+            connect: {
+              rejectUnauthorized: false,
+            },
+          }),
+        })
+      );
+    } finally {
+      await stop(server);
+    }
   });
 
   await test("Basic request handling", async () => {
-    const port = genPort();
+    const port = await genPort();
     const BasicRequestHandler = (event) => {
       event.respondWith(new Response("Hello, World!", { status: 200 }));
     };
     addEventListener("fetch", BasicRequestHandler);
     const server = await start({ port });
-    const response = await fetch(`http://localhost:${port}`);
-    assert.equal(response.status, 200);
-    assert.equal(await response.text(), "Hello, World!");
-    await stop(server);
-    removeEventListener("fetch", BasicRequestHandler);
+    try {
+      const response = await fetch(`http://localhost:${port}`);
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), "Hello, World!");
+    } finally {
+      removeEventListener("fetch", BasicRequestHandler);
+      await stop(server);
+    }
   });
 
   await test("Routing", async () => {
-    const port = genPort();
+    const port = await genPort();
     route("GET", "/hello/:name", async (req, params) => {
       return new Response(`Hello, ${params.name}!`, { status: 200 });
     });
 
     const server = await start({ port });
-    const response = await fetch(`http://localhost:${port}/hello/Alice`);
-    assert.equal(response.status, 200);
-    assert.equal(await response.text(), "Hello, Alice!");
-
-    await stop(server);
+    try {
+      const response = await fetch(`http://localhost:${port}/hello/Alice`);
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), "Hello, Alice!");
+    } finally {
+      await stop(server);
+    }
   });
 
   await test("Middleware", async () => {
-    const port = genPort();
+    const port = await genPort();
     let middlewareCalled = false;
     use(async (req, res) => {
       middlewareCalled = true;
@@ -208,53 +228,68 @@ VyyNz/1TUWii+PL9b9yswag=
     addEventListener("fetch", middlewareHandler);
 
     const server = await start({ port });
-
-    await fetch(`http://localhost:${port}`);
-    assert.equal(middlewareCalled, true);
-
-    await stop(server);
-    removeEventListener("fetch", middlewareHandler);
+    try {
+      await fetch(`http://localhost:${port}`);
+      assert.equal(middlewareCalled, true);
+    } finally {
+      removeEventListener("fetch", middlewareHandler);
+      await stop(server);
+    }
   });
 
   await test("WebSocket", async () => {
-    const port = genPort();
-    return new Promise(async (resolve) => {
-      const webSocketHandler = (ws) => {
-        ws.on("message", (message) => {
-          ws.send(`Echo: ${message}`);
+    const port = await genPort();
+    const webSocketHandler = (ws) => {
+      ws.on("message", (message) => {
+        ws.send(`Echo: ${message}`);
+      });
+    };
+    addEventListener("websocket", webSocketHandler);
+    const server = await start({ port });
+    try {
+      await new Promise((resolve, reject) => {
+        const ws = new WebSocket(`ws://localhost:${port}`);
+        ws.on("open", () => {
+          ws.send("Hello, WebSocket!");
         });
-      };
-      addEventListener("websocket", webSocketHandler);
-      const server = await start({ port });
-      const ws = new WebSocket(`ws://localhost:${port}`);
-      ws.on("open", () => {
-        ws.send("Hello, WebSocket!");
+        ws.on("message", (data) => {
+          try {
+            assert.equal(data.toString(), "Echo: Hello, WebSocket!");
+            ws.close();
+            resolve();
+          } catch (err) {
+            ws.close();
+            reject(err);
+          }
+        });
+        ws.on("error", reject);
       });
-      ws.on("message", (data) => {
-        assert.equal(data.toString(), "Echo: Hello, WebSocket!");
-        ws.close();
-        stop(server).then(resolve);
-      });
-    });
+    } finally {
+      removeEventListener("websocket", webSocketHandler);
+      await stop(server);
+    }
   });
 
   await test("Server-Sent Events", async () => {
     // TODO: can I use an EventSource Polyfill?
-    const port = genPort();
+    const port = await genPort();
     addEventListener("fetch", sseHandler);
     const server = await start({ port });
-    const response = await fetch(`http://localhost:${port}/sse`);
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get("Content-Type"), "text/event-stream");
-    const reader = response.body.getReader();
-    const { value } = await reader.read();
-    const eventData = new TextDecoder().decode(value);
-    assert.match(
-      eventData,
-      /^event: update\ndata: {"message":"Hello SSE"}\n\n$/
-    );
-    await stop(server);
-    removeEventListener("fetch", sseHandler);
+    try {
+      const response = await fetch(`http://localhost:${port}/sse`);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("Content-Type"), "text/event-stream");
+      const reader = response.body.getReader();
+      const { value } = await reader.read();
+      const eventData = new TextDecoder().decode(value);
+      assert.match(
+        eventData,
+        /^event: update\ndata: {"message":"Hello SSE"}\n\n$/
+      );
+    } finally {
+      removeEventListener("fetch", sseHandler);
+      await stop(server);
+    }
   });
 
   await test("Custom events", async () => {
@@ -271,7 +306,7 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("Error handling", async () => {
-    const port = genPort();
+    const port = await genPort();
     const fetchHandler = () => {
       throw new Error("Test error");
     };
@@ -279,13 +314,16 @@ VyyNz/1TUWii+PL9b9yswag=
     const server = await start({ port });
     const { promise: error, resolve: errorHandler } = Promise.withResolvers();
     addEventListener("error", errorHandler);
-    const response = await fetch(`http://localhost:${port}`);
-    assert.equal(response.status, 500);
-    assert.equal(await response.text(), "Internal Server Error");
-    assert.equal((await error).message, "Test error");
-    removeEventListener("fetch", fetchHandler);
-    removeEventListener("error", errorHandler);
-    stop(server);
+    try {
+      const response = await fetch(`http://localhost:${port}`);
+      assert.equal(response.status, 500);
+      assert.equal(await response.text(), "Internal Server Error");
+      assert.equal((await error).message, "Test error");
+    } finally {
+      removeEventListener("fetch", fetchHandler);
+      removeEventListener("error", errorHandler);
+      await stop(server);
+    }
   });
 
   await test("a request-handler error does not crash the process when no 'error' listener is registered", async () => {
@@ -300,7 +338,7 @@ VyyNz/1TUWii+PL9b9yswag=
     // error listener — which is optional. Spawn a bare child process that
     // never registers one, and confirm a thrown route handler still
     // degrades to a 500 response instead of taking the process down.
-    const port = genPort();
+    const port = await genPort();
     const controlsUrl = JSON.stringify(new URL("./controls.mjs", import.meta.url).href);
     const script = `
       import { start, route } from ${controlsUrl};
@@ -317,31 +355,35 @@ VyyNz/1TUWii+PL9b9yswag=
   });
 
   await test("a malformed request-target returns an error response instead of crashing the process", async () => {
-    const port = genPort();
+    const port = await genPort();
+    // `start()` awaits `server.listen()`'s own callback before resolving,
+    // so (unlike serve.mjs's `serve()`) there's no separate "wait until
+    // actually listening" step needed here.
     const server = await start({ port });
+    try {
+      // A well-formed HTTP request line whose absolute-form target contains
+      // invalid IPv6-bracket syntax. Node's HTTP parser accepts this and
+      // hands it straight through as `req.url`, but the WHATWG `URL`
+      // constructor throws on it. Regression for: `toWebRequest()` used to
+      // be called *outside* the request handler's try/catch, so this single
+      // request crashed the entire process instead of getting an error
+      // response.
+      const response = await sendRaw(
+        port,
+        "GET http://[::1:bad/ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+      );
+      assert.match(response, /^HTTP\/1\.1 400 /);
 
-    // A well-formed HTTP request line whose absolute-form target contains
-    // invalid IPv6-bracket syntax. Node's HTTP parser accepts this and
-    // hands it straight through as `req.url`, but the WHATWG `URL`
-    // constructor throws on it. Regression for: `toWebRequest()` used to
-    // be called *outside* the request handler's try/catch, so this single
-    // request crashed the entire process instead of getting an error
-    // response.
-    const response = await sendRaw(
-      port,
-      "GET http://[::1:bad/ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
-    );
-    assert.match(response, /^HTTP\/1\.1 400 /);
-
-    // The process (and this server) must still be alive and serving.
-    const res = await fetch(`http://localhost:${port}/`);
-    assert.equal(res.status, 404);
-
-    await stop(server);
+      // The process (and this server) must still be alive and serving.
+      const res = await fetch(`http://localhost:${port}/`);
+      assert.equal(res.status, 404);
+    } finally {
+      await stop(server);
+    }
   });
 
   await test("repeated response headers (e.g. multiple Set-Cookie) are all sent, not just the last one", async () => {
-    const port = genPort();
+    const port = await genPort();
     const cookieHandler = (event) => {
       const headers = new Headers();
       headers.append("set-cookie", "a=1");
@@ -350,16 +392,17 @@ VyyNz/1TUWii+PL9b9yswag=
     };
     addEventListener("fetch", cookieHandler);
     const server = await start({ port });
-
-    const res = await fetch(`http://localhost:${port}/`);
-    assert.deepEqual(res.headers.getSetCookie().sort(), ["a=1", "b=2"]);
-
-    removeEventListener("fetch", cookieHandler);
-    await stop(server);
+    try {
+      const res = await fetch(`http://localhost:${port}/`);
+      assert.deepEqual(res.headers.getSetCookie().sort(), ["a=1", "b=2"]);
+    } finally {
+      removeEventListener("fetch", cookieHandler);
+      await stop(server);
+    }
   });
 
   await test("a response body stream that errors mid-response does not crash the process", async () => {
-    const port = genPort();
+    const port = await genPort();
     const brokenStreamHandler = (event) => {
       const stream = new ReadableStream({
         start(controller) {
@@ -371,16 +414,18 @@ VyyNz/1TUWii+PL9b9yswag=
     };
     addEventListener("fetch", brokenStreamHandler);
     const server = await start({ port });
+    try {
+      const res = await fetch(`http://localhost:${port}/`);
+      assert.equal(res.status, 200);
+      await assert.rejects(res.text());
 
-    const res = await fetch(`http://localhost:${port}/`);
-    assert.equal(res.status, 200);
-    await assert.rejects(res.text());
-
-    // The process (and this server) must still be alive and serving.
-    removeEventListener("fetch", brokenStreamHandler);
-    const ok = await fetch(`http://localhost:${port}/`);
-    assert.equal(ok.status, 404, "server must still accept and handle new requests");
-
-    await stop(server);
+      // The process (and this server) must still be alive and serving.
+      removeEventListener("fetch", brokenStreamHandler);
+      const ok = await fetch(`http://localhost:${port}/`);
+      assert.equal(ok.status, 404, "server must still accept and handle new requests");
+    } finally {
+      removeEventListener("fetch", brokenStreamHandler);
+      await stop(server);
+    }
   });
 });
