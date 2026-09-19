@@ -41,7 +41,9 @@
     "./body": "./body.mjs",
     "./test-harness": "./test-harness.mjs",
     "./auth": "./auth.mjs",
-    "./compose": "./compose.mjs"
+    "./compose": "./compose.mjs",
+    "./node-request": "./lib/node-request.mjs",
+    "./websocket": "./lib/websocket.mjs"
   },
   "files": [
     "serve.mjs",

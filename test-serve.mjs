@@ -17,6 +17,7 @@ import net from "node:net";
 import WebSocket from "ws";
 import genPort from "./gen-random-port.mjs";
 import serve, { onWebSocket } from "./serve.mjs";
+import { upgradeRawSocket, WEBSOCKET_UPGRADE_RESPONSE } from "./lib/websocket.mjs";
 import { json, text, form, buffer } from "./body.mjs";
 import { basicAuth, bearerAuth, apiKeyAuth } from "./auth.mjs";
 import { compose } from "./compose.mjs";
@@ -85,9 +86,26 @@ const serveReady = (handler, options) => {
 };
 
 describe("serve()", async () => {
+  await test("onListen reports the actual OS-assigned port for port: 0, not the literal 0 requested", async () => {
+    let reportedPort;
+    const server = await serveReady((request) => new Response("ok"), {
+      port: 0,
+      onListen: (info) => {
+        reportedPort = info.port;
+      },
+    });
+    try {
+      assert.ok(reportedPort > 0);
+      const res = await fetch(`http://localhost:${reportedPort}/`);
+      assert.equal(res.status, 200);
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
+  });
+
   await test("starts and stops a server", async () => {
     const port = await genPort();
-    const server = serve((request) => new Response("ok"), { port });
+    const server = await serveReady((request) => new Response("ok"), { port });
     try {
       await assert.doesNotReject(fetch(`http://localhost:${port}/`));
     } finally {
@@ -99,7 +117,12 @@ describe("serve()", async () => {
 
   await test("also accepts the (options, handler) call order", async () => {
     const port = await genPort();
-    const server = serve({ port }, () => new Response("ok"));
+    // Can't use serveReady() here -- it always calls serve(handler, options),
+    // and the whole point of this test is exercising the *other* order.
+    // Waits for onListen itself instead, same race fix, different plumbing.
+    const server = await new Promise((resolvePromise) => {
+      const s = serve({ port, onListen: () => resolvePromise(s) }, () => new Response("ok"));
+    });
     try {
       const res = await fetch(`http://localhost:${port}/`);
       assert.equal(res.status, 200);
@@ -110,7 +133,7 @@ describe("serve()", async () => {
 
   await test("basic handler round-trip: request in, response out", async () => {
     const port = await genPort();
-    const server = serve(
+    const server = await serveReady(
       async (request) => {
         const url = new URL(request.url);
         return new Response(
@@ -150,7 +173,12 @@ describe("serve()", async () => {
       });
     })(fallback);
 
-    const server = serve(handler, { port });
+    // serveReady(), not raw serve() -- server.listen() completes
+    // asynchronously, so fetching immediately after serve() returns can
+    // race a not-yet-listening server (see serveReady()'s own doc comment
+    // above); confirmed flaky in practice (3 of 4 runs failed with
+    // ECONNREFUSED) before this fix, not just theoretical.
+    const server = await serveReady(handler, { port });
     try {
       // Non-upgrade requests still fall through to the inner handler.
       const res = await fetch(`http://localhost:${port}/`);
@@ -162,6 +190,45 @@ describe("serve()", async () => {
         ws.on("message", (data) => {
           try {
             assert.equal(data.toString(), "echo: hi");
+            ws.close();
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        });
+        ws.on("error", reject);
+      });
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
+  });
+
+  await test("upgradeRawSocket()/WEBSOCKET_UPGRADE_RESPONSE work standalone, called inline from a request handler -- the shape @johnhenry/servable's upgradeWebSocket() uses, not just via onWebSocket()'s outer-middleware sugar", async () => {
+    const port = await genPort();
+    const handler = async (request, context) => {
+      if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+        const ws = await upgradeRawSocket(request.raw || context.raw);
+        ws.on("message", (message) => ws.send(`inline-echo: ${message}`));
+        return WEBSOCKET_UPGRADE_RESPONSE;
+      }
+      return new Response("not a websocket", { status: 200 });
+    };
+
+    // serve() itself always calls toWebRequest(req, { attachRaw: true }) --
+    // this handler just relies on that already being the case for `serve()`
+    // callers, same as onWebSocket() does. serveReady(), not raw serve()
+    // -- see the "onWebSocket() composes..." test above for why.
+    const server = await serveReady(handler, { port });
+    try {
+      const res = await fetch(`http://localhost:${port}/`);
+      assert.equal(await res.text(), "not a websocket");
+
+      await new Promise((resolve, reject) => {
+        const ws = new WebSocket(`ws://localhost:${port}`);
+        ws.on("open", () => ws.send("hi"));
+        ws.on("message", (data) => {
+          try {
+            assert.equal(data.toString(), "inline-echo: hi");
             ws.close();
             resolve();
           } catch (err) {

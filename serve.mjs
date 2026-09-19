@@ -1,8 +1,8 @@
 import http from "http";
 import https from "https";
 import { Readable, pipeline } from "stream";
-import { WebSocketServer } from "ws";
 import { toWebRequest } from "./lib/node-request.mjs";
+import { upgradeRawSocket, WEBSOCKET_UPGRADE_RESPONSE } from "./lib/websocket.mjs";
 
 export const serve = (handlerOrOptions, maybeHandler) => {
   let options = {};
@@ -132,9 +132,14 @@ export const serve = (handlerOrOptions, maybeHandler) => {
 
   server.listen(port, hostname, () => {
     if (typeof options.onListen === "function") {
+      // `port: 0` (an ephemeral port, requested by callers that want the
+      // OS to assign one) was being echoed straight back as `0` here --
+      // read the port the OS actually bound instead, same as any other
+      // real address.
+      const actualPort = server.address()?.port ?? port;
       options.onListen({
-        path: `http${cert && key ? "s" : ""}://${hostname}:${port}/`,
-        port,
+        path: `http${cert && key ? "s" : ""}://${hostname}:${actualPort}/`,
+        port: actualPort,
       });
     }
   });
@@ -165,31 +170,22 @@ export const serve = (handlerOrOptions, maybeHandler) => {
  * serve(handler, { port: 3000 });
  */
 export const onWebSocket = (wsHandler) => {
-  const wss = new WebSocketServer({ noServer: true });
-
   return (innerHandler) => {
-    // Attach the upgrade handler to the serve-level server
-    const composed = (request, context = {}) => {
+    const composed = async (request, context = {}) => {
       const raw = request.raw || context.raw;
       if (
         raw &&
         request.headers.get("upgrade")?.toLowerCase() === "websocket"
       ) {
-        // Perform the upgrade using the raw Node.js request
-        const socket = raw.socket;
-        wss.handleUpgrade(raw, socket, Buffer.alloc(0), (ws) => {
-          wss.emit("connection", ws, raw);
-          wsHandler(ws, request, context);
-        });
-        // Signal status 101 so `serve()` knows not to write a response body
-        // (the socket has already been handed off for the upgrade). This is
-        // intentionally a plain object, not `new Response(null, { status:
-        // 101 })` — the Fetch spec's `Response` constructor rejects any
-        // status outside 200-599, so constructing a real Response with
-        // status 101 throws a RangeError. `serve()`'s dispatcher only reads
-        // `.status` before returning early, so a plain object satisfies the
-        // same contract without the illegal construction.
-        return { status: 101 };
+        // upgradeRawSocket/WEBSOCKET_UPGRADE_RESPONSE live in
+        // lib/websocket.mjs (also exported as `leserve/websocket`) so a
+        // caller that wants to make this decision *inline* inside a single
+        // request handler -- rather than via this outer middleware
+        // wrapping the whole server -- can use the same primitive
+        // (@johnhenry/servable's `upgradeWebSocket()` does exactly this).
+        const ws = await upgradeRawSocket(raw);
+        wsHandler(ws, request, context);
+        return WEBSOCKET_UPGRADE_RESPONSE;
       }
       return innerHandler(request, context);
     };

@@ -584,6 +584,8 @@ Objects and strings are auto-serialized with the appropriate `content-type`.
 | `leserve/auth` | `basicAuth`, `bearerAuth`, `apiKeyAuth` — for the `serve()` model |
 | `leserve/compose` | `compose(...fns)` — middleware composition for the `serve()` model |
 | `leserve/test-harness` | `testHandler` — Test `serve()`-style handlers without a server |
+| `leserve/websocket` | `upgradeRawSocket(raw)`, `WEBSOCKET_UPGRADE_RESPONSE` — the low-level primitive `onWebSocket()` is sugar over, for a caller that wants to decide inline within a single request handler whether to upgrade |
+| `leserve/node-request` | `toWebRequest(req, options?)` — converts a raw Node `IncomingMessage` into a Web `Request`, the same conversion `serve()` itself uses |
 
 ## License
 
