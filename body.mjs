@@ -16,6 +16,46 @@
 // ── Request body parsing ────────────────────────────────────────────
 
 /**
+ * Read a request body as an ArrayBuffer, aborting as soon as more than
+ * `limit` bytes have arrived instead of buffering the whole body first.
+ *
+ * `request.arrayBuffer()` fully drains and buffers the entire body before
+ * anyone gets a chance to look at its size, which defeats the purpose of a
+ * `limit` for exactly the case it exists to guard against — a large or
+ * DoS-sized payload. This reads the body's stream chunk by chunk, tracks
+ * the running total, and cancels the reader the moment the limit is
+ * exceeded so the rest of the body is never received or held in memory.
+ *
+ * @private
+ * @param {Request} request
+ * @param {number} limit
+ * @returns {Promise<ArrayBuffer>}
+ */
+const readLimited = async (request, limit) => {
+  if (!request.body) return new ArrayBuffer(0);
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel().catch(() => {});
+      throw Object.assign(new Error("Payload too large"), { status: 413 });
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out.buffer;
+};
+
+/**
  * Parse request body as JSON.
  * @param {Request} request
  * @param {Object} [options]
@@ -24,10 +64,7 @@
  */
 export const json = async (request, { limit } = {}) => {
   if (limit) {
-    const buf = await request.arrayBuffer();
-    if (buf.byteLength > limit) {
-      throw Object.assign(new Error("Payload too large"), { status: 413 });
-    }
+    const buf = await readLimited(request, limit);
     return JSON.parse(new TextDecoder().decode(buf));
   }
   return request.json();
@@ -42,10 +79,7 @@ export const json = async (request, { limit } = {}) => {
  */
 export const text = async (request, { limit } = {}) => {
   if (limit) {
-    const buf = await request.arrayBuffer();
-    if (buf.byteLength > limit) {
-      throw Object.assign(new Error("Payload too large"), { status: 413 });
-    }
+    const buf = await readLimited(request, limit);
     return new TextDecoder().decode(buf);
   }
   return request.text();

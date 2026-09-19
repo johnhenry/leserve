@@ -1,6 +1,6 @@
 import http from "http";
 import https from "https";
-import { Readable } from "stream";
+import { Readable, pipeline } from "stream";
 import { WebSocketServer } from "ws";
 import { toWebRequest } from "./lib/node-request.mjs";
 
@@ -27,15 +27,20 @@ export const serve = (handlerOrOptions, maybeHandler) => {
   const server =
     cert && key ? https.createServer({ cert, key }) : http.createServer();
   server.on("request", async (req, res) => {
-    const request = toWebRequest(req, { attachRaw: true });
-
-    const context = {
-      remoteAddress: req.socket?.remoteAddress,
-      raw: req,
-      state: new Map(),
-    };
-
     try {
+      // Converting the raw request can itself throw (e.g. a malformed
+      // request-target that Node's HTTP parser lets through but isn't a
+      // valid URL) — this must happen *inside* the try block. Previously
+      // it ran before this try/catch, so a single malformed request threw
+      // an uncaught exception that crashed the whole process.
+      const request = toWebRequest(req, { attachRaw: true });
+
+      const context = {
+        remoteAddress: req.socket?.remoteAddress,
+        raw: req,
+        state: new Map(),
+      };
+
       const response = await handler(request, context);
 
       // Skip writing for WebSocket upgrades (status 101)
@@ -45,8 +50,24 @@ export const serve = (handlerOrOptions, maybeHandler) => {
 
       res.statusCode = response.status;
 
+      // `Headers` iteration yields one [name, value] pair per occurrence
+      // for headers that aren't combined (notably `Set-Cookie` — the Fetch
+      // spec deliberately keeps repeated Set-Cookie entries distinct
+      // instead of comma-joining them). Calling `res.setHeader(name, ...)`
+      // once per pair would make each call overwrite the last, silently
+      // dropping all but the final Set-Cookie header. Collect same-named
+      // values first and hand Node an array so it emits one header line
+      // per value.
+      const headersByName = new Map();
       for (const [key, value] of response.headers) {
-        res.setHeader(key, value);
+        if (headersByName.has(key)) {
+          headersByName.get(key).push(value);
+        } else {
+          headersByName.set(key, [value]);
+        }
+      }
+      for (const [key, values] of headersByName) {
+        res.setHeader(key, values.length === 1 ? values[0] : values);
       }
 
       if (response.body) {
@@ -55,9 +76,25 @@ export const serve = (handlerOrOptions, maybeHandler) => {
         } else if (response.body instanceof Uint8Array) {
           res.end(Buffer.from(response.body));
         } else if (response.body instanceof ReadableStream) {
-          Readable.fromWeb(response.body).pipe(res);
+          // `.pipe()` does not forward source errors to the destination —
+          // if the stream errors mid-response (e.g. an upstream fetch
+          // failing after the response already started), the unhandled
+          // 'error' event on the Readable crashes the whole process.
+          // `pipeline()` wires up error propagation and destroys both
+          // sides for us.
+          pipeline(Readable.fromWeb(response.body), res, (err) => {
+            if (err) {
+              console.error("Error streaming response body:", err);
+              res.destroy(err);
+            }
+          });
         } else if (typeof response.body.pipe === "function") {
-          response.body.pipe(res);
+          pipeline(response.body, res, (err) => {
+            if (err) {
+              console.error("Error streaming response body:", err);
+              res.destroy(err);
+            }
+          });
         } else {
           res.end(String(response.body));
         }
@@ -66,8 +103,20 @@ export const serve = (handlerOrOptions, maybeHandler) => {
       }
     } catch (error) {
       console.error("Error handling request:", error);
-      res.statusCode = 500;
-      res.end("Internal Server Error");
+      // Prefer a tagged status from the error (e.g. the 400 thrown by
+      // `toWebRequest()` for a malformed URL, or a 413 thrown by
+      // `body.mjs`'s `json()`/`text()` for an oversized payload) so those
+      // don't get flattened into a generic 500.
+      const status =
+        Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599
+          ? error.status
+          : 500;
+      if (!res.headersSent) {
+        res.statusCode = status;
+        res.end(status === 500 ? "Internal Server Error" : error.message || "Error");
+      } else {
+        res.destroy(error);
+      }
     }
   });
 

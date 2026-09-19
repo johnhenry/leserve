@@ -2,6 +2,9 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import net from "node:net";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 // Import `fetch` from the same `undici` version as `Agent` below. Node's
 // global `fetch` is backed by whatever undici is bundled with the running
 // Node version; passing an `Agent` from a *different* undici version as its
@@ -40,6 +43,28 @@ const isPortClosed = (port) => {
     });
   });
 };
+
+/**
+ * Send a raw HTTP request over a plain TCP socket and resolve with the
+ * status line once the connection closes. Used to exercise request-lines
+ * that `fetch()` itself would refuse to construct (e.g. a malformed
+ * absolute-form URL), so we can confirm the server degrades to an error
+ * response instead of crashing.
+ */
+const sendRaw = (port, rawRequest) => {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(port, "localhost", () => {
+      socket.write(rawRequest);
+    });
+    let data = "";
+    socket.on("data", (chunk) => (data += chunk.toString()));
+    socket.on("close", () => resolve(data));
+    socket.on("error", reject);
+    setTimeout(() => reject(new Error("timed out waiting for a response")), 5000);
+  });
+};
+
+const execFileAsync = promisify(execFile);
 
 const sseHandler = (event) => {
   if (event.request.url.endsWith("/sse")) {
@@ -261,5 +286,101 @@ VyyNz/1TUWii+PL9b9yswag=
     removeEventListener("fetch", fetchHandler);
     removeEventListener("error", errorHandler);
     stop(server);
+  });
+
+  await test("a request-handler error does not crash the process when no 'error' listener is registered", async () => {
+    // This test file registers a top-level `addEventListener("error", ...)`
+    // listener (see above), so it can't exercise the "nobody is listening"
+    // case in-process — Node's `EventEmitter` special-cases the "error"
+    // event: emitting it with zero listeners *throws* instead of dropping
+    // it. Since `start()`'s request handler used to call
+    // `eventEmitter.emit("error", error)` unconditionally on every caught
+    // exception, ANY thrown route/middleware/fetch-event error crashed the
+    // entire process unless the library consumer happened to register an
+    // error listener — which is optional. Spawn a bare child process that
+    // never registers one, and confirm a thrown route handler still
+    // degrades to a 500 response instead of taking the process down.
+    const port = genPort();
+    const controlsUrl = JSON.stringify(new URL("./controls.mjs", import.meta.url).href);
+    const script = `
+      import { start, route } from ${controlsUrl};
+      route("GET", "/boom", () => { throw new Error("boom"); });
+      await start({ port: ${port} });
+      const res = await fetch("http://localhost:${port}/boom");
+      process.stdout.write(JSON.stringify({ status: res.status, body: await res.text() }));
+      process.exit(0);
+    `;
+    const { stdout } = await execFileAsync(process.execPath, ["--input-type=module", "-e", script]);
+    const result = JSON.parse(stdout);
+    assert.equal(result.status, 500);
+    assert.equal(result.body, "Internal Server Error");
+  });
+
+  await test("a malformed request-target returns an error response instead of crashing the process", async () => {
+    const port = genPort();
+    const server = await start({ port });
+
+    // A well-formed HTTP request line whose absolute-form target contains
+    // invalid IPv6-bracket syntax. Node's HTTP parser accepts this and
+    // hands it straight through as `req.url`, but the WHATWG `URL`
+    // constructor throws on it. Regression for: `toWebRequest()` used to
+    // be called *outside* the request handler's try/catch, so this single
+    // request crashed the entire process instead of getting an error
+    // response.
+    const response = await sendRaw(
+      port,
+      "GET http://[::1:bad/ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    );
+    assert.match(response, /^HTTP\/1\.1 400 /);
+
+    // The process (and this server) must still be alive and serving.
+    const res = await fetch(`http://localhost:${port}/`);
+    assert.equal(res.status, 404);
+
+    await stop(server);
+  });
+
+  await test("repeated response headers (e.g. multiple Set-Cookie) are all sent, not just the last one", async () => {
+    const port = genPort();
+    const cookieHandler = (event) => {
+      const headers = new Headers();
+      headers.append("set-cookie", "a=1");
+      headers.append("set-cookie", "b=2");
+      event.respondWith(new Response("ok", { headers }));
+    };
+    addEventListener("fetch", cookieHandler);
+    const server = await start({ port });
+
+    const res = await fetch(`http://localhost:${port}/`);
+    assert.deepEqual(res.headers.getSetCookie().sort(), ["a=1", "b=2"]);
+
+    removeEventListener("fetch", cookieHandler);
+    await stop(server);
+  });
+
+  await test("a response body stream that errors mid-response does not crash the process", async () => {
+    const port = genPort();
+    const brokenStreamHandler = (event) => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("partial-"));
+          setTimeout(() => controller.error(new Error("upstream broke")), 20);
+        },
+      });
+      event.respondWith(new Response(stream, { status: 200 }));
+    };
+    addEventListener("fetch", brokenStreamHandler);
+    const server = await start({ port });
+
+    const res = await fetch(`http://localhost:${port}/`);
+    assert.equal(res.status, 200);
+    await assert.rejects(res.text());
+
+    // The process (and this server) must still be alive and serving.
+    removeEventListener("fetch", brokenStreamHandler);
+    const ok = await fetch(`http://localhost:${port}/`);
+    assert.equal(ok.status, 404, "server must still accept and handle new requests");
+
+    await stop(server);
   });
 });

@@ -32,8 +32,24 @@ export const basicAuth = (validate) => (handler) => async (request, ctx) => {
   if (!auth || !auth.startsWith("Basic ")) {
     return unauthorized("Missing credentials", "Basic");
   }
-  const decoded = atob(auth.slice(6));
+  // The base64 payload and the "user:pass" shape inside it are both
+  // attacker-controlled. A non-base64 value made `atob()` throw
+  // synchronously — since this function is async, that became a rejected
+  // promise that propagated past this middleware as an uncaught error
+  // (a generic 500 upstream) instead of the 401 a malformed credential
+  // should produce. A payload with no colon separator isn't valid
+  // "user:pass" credentials either (RFC 7617), so treat both cases the
+  // same way rather than passing mangled values to `validate()`.
+  let decoded;
+  try {
+    decoded = atob(auth.slice(6));
+  } catch {
+    return unauthorized("Malformed credentials", "Basic");
+  }
   const colon = decoded.indexOf(":");
+  if (colon === -1) {
+    return unauthorized("Malformed credentials", "Basic");
+  }
   const username = decoded.slice(0, colon);
   const password = decoded.slice(colon + 1);
   if (!(await validate(username, password, request))) {
