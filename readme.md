@@ -20,25 +20,18 @@ npm install @johnhenry/leserve
 > was already at 0.0.0 unscoped, so this isn't a downgrade -- just a new
 > home).
 
-## Which API should I use?
-
-`leserve` ships one API: `serve()`, described below. If you want a
-self-contained, batteries-included server instead — with built-in routing,
-middleware, and WebSocket handling dispatched through a service-worker-style
-`addEventListener("fetch", ...)` API — see
-[`@johnhenry/servant`](https://github.com/johnhenry/servant), a separate
-package extracted from what used to be `leserve/controls` + `leserve/event`.
-`servant` depends on `leserve` only for `leserve/node-request`; the two are
-otherwise independent server implementations and don't interoperate — don't
-`start()` a `servant` server and call this package's `serve()` in the same
-process expecting them to share middleware/state.
+`leserve` ships one API: `serve()`, below — a plain `(Request) => Response`
+handler, no routing/middleware/event framework attached. If you want a
+batteries-included server instead, see
+[`@johnhenry/servant`](https://github.com/johnhenry/servant) (an
+independent implementation; the two don't interoperate).
 
 ## Usage: serve
 
 (See similar: [Deno.serve](https://docs.deno.com/api/deno/~/Deno.serve))
 
 ```javascript
-import serve from "leserve/serve";
+import serve from "@johnhenry/leserve/serve";
 
 const handler = (request) => {
   return new Response("Hello, World!", {
@@ -83,7 +76,7 @@ A composable WebSocket-upgrade middleware for the `serve()` model — this is `s
 `onWebSocket` returns a middleware factory `(innerHandler) => composedHandler`: requests with an `Upgrade: websocket` header are upgraded and handed to `wsHandler`; every other request falls through to `innerHandler` unchanged.
 
 ```javascript
-import serve, { onWebSocket } from "leserve/serve";
+import serve, { onWebSocket } from "@johnhenry/leserve/serve";
 
 const withWebSocket = onWebSocket((ws, request, context) => {
   ws.on("message", (message) => {
@@ -200,7 +193,7 @@ echos back requests as responses in JSON format on port 8000.
 ## Body Parsing & Response Helpers
 
 ```js
-import { json, text, form, buffer, respond, error, redirect } from "leserve/body";
+import { json, text, form, buffer, respond, error, redirect } from "@johnhenry/leserve/body";
 ```
 
 ### Request Parsing
@@ -228,7 +221,7 @@ redirect("/login")                  // → 302 redirect
 ## Authentication Middleware
 
 ```js
-import { basicAuth, bearerAuth, apiKeyAuth } from "leserve/auth";
+import { basicAuth, bearerAuth, apiKeyAuth } from "@johnhenry/leserve/auth";
 ```
 
 Each factory takes a validation function and returns a handler wrapper:
@@ -265,7 +258,7 @@ apiKeyAuth(async (key, request) => {
 ## Middleware Composition
 
 ```js
-import { compose } from "leserve/compose";
+import { compose } from "@johnhenry/leserve/compose";
 ```
 
 Chain middleware and a base handler — all in the `(Request) => Response` shape used by `serve()` — into a single handler:
@@ -286,7 +279,7 @@ Like `leserve/auth` and `onWebSocket()`, `compose()` is designed for the `serve(
 ## Test Harness
 
 ```js
-import { testHandler } from "leserve/test-harness";
+import { testHandler } from "@johnhenry/leserve/test-harness";
 ```
 
 Test `(Request) => Response` handlers without starting a server:
