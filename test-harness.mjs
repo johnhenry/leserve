@@ -2,7 +2,7 @@
  * Test harness for (Request) => Response handlers.
  *
  * Usage:
- *   import { testHandler } from "leserve/test-harness";
+ *   import { testHandler } from "@johnhenry/leserve/test-harness";
  *
  *   const app = testHandler(myHandler);
  *   const res = await app.get("/users");

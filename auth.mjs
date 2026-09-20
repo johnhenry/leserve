@@ -1,11 +1,11 @@
 /**
- * Authentication middleware factories for leserve handlers.
+ * Authentication middleware factories for @johnhenry/leserve handlers.
  *
  * Each factory takes a validation function and returns a higher-order
  * function that wraps a handler with authentication.
  *
  * Usage:
- *   import { bearerAuth } from "leserve/auth";
+ *   import { bearerAuth } from "@johnhenry/leserve/auth";
  *
  *   const requireAuth = bearerAuth(async (token) => token === SECRET);
  *   const handler = requireAuth((request) => new Response("ok"));

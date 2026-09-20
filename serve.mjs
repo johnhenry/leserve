@@ -208,7 +208,7 @@ export const onWebSocket = (wsHandler) => {
         request.headers.get("upgrade")?.toLowerCase() === "websocket"
       ) {
         // upgradeRawSocket/WEBSOCKET_UPGRADE_RESPONSE live in
-        // lib/websocket.mjs (also exported as `leserve/websocket`) so a
+        // lib/websocket.mjs (also exported as `@johnhenry/leserve/websocket`) so a
         // caller that wants to make this decision *inline* inside a single
         // request handler -- rather than via this outer middleware
         // wrapping the whole server -- can use the same primitive

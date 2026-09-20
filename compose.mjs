@@ -5,7 +5,7 @@
  * Final handler:       (request, ctx) => Response
  *
  * Usage:
- *   import { compose } from "leserve/compose";
+ *   import { compose } from "@johnhenry/leserve/compose";
  *   const app = compose(withCache(), requireAuth, handler);
  */
 export const compose = (...fns) => {

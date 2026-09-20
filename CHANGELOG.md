@@ -7,6 +7,10 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- **Renamed the package from unscoped `leserve` to `@johnhenry/leserve`**, adopting it into the `@johnhenry` npm scope. Version restarts at `0.0.0` (it was already at `0.0.0` unscoped, so this isn't a downgrade -- just a new home). Added `publishConfig`, CI, and publish workflows for the scoped package, matching the rest of the `@johnhenry/*` family. The GitHub repository is intentionally kept as `serve-cold` rather than renamed to match the new package name.
+
 ### Removed
 
 - **`controls.mjs` + `event.mjs` (the `leserve/controls`/`leserve/event` API) have moved to a new, separate package, [`@johnhenry/servant`](https://github.com/johnhenry/servant).** This package's README and this CHANGELOG had already been framing `controls`/`event` as a "separate, incompatible" server implementation living alongside the recommended `serve()` for several releases — this makes that split real at the package boundary. `serve()` (this package's `main`/`.` export) is now the only server implementation `leserve` ships. The `./controls` and `./event` `exports` entries, and the `--events`/`-E` CLI flag (`serve-cold.mjs`'s `caseEvents()`), are gone; `@johnhenry/servant` depends on `leserve` only for `leserve/node-request`, which is unaffected. If you were using `controls`/`event`, install `@johnhenry/servant` and update your imports from `leserve/controls`/`leserve/event` to `@johnhenry/servant`/`@johnhenry/servant/event`.

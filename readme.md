@@ -1,6 +1,6 @@
 # LeServe
 
-[![npm version](https://badge.fury.io/js/leserve.svg)](https://badge.fury.io/js/leserve)
+[![npm version](https://badge.fury.io/js/%40johnhenry%2Fleserve.svg)](https://www.npmjs.com/package/@johnhenry/leserve)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <img alt="" width="512" height="512" src="./logo.jpeg" style="width:512px;height:512px"/>
@@ -20,7 +20,7 @@ npm install @johnhenry/leserve
 > was already at 0.0.0 unscoped, so this isn't a downgrade -- just a new
 > home).
 
-`leserve` ships one API: `serve()`, below — a plain `(Request) => Response`
+`@johnhenry/leserve` ships one API: `serve()`, below — a plain `(Request) => Response`
 handler, no routing/middleware/event framework attached. If you want a
 batteries-included server instead, see
 [`@johnhenry/servant`](https://github.com/johnhenry/servant) (an
@@ -67,7 +67,7 @@ The handler function receives a `Request` object (and an optional `context` obje
 
 ##### Lifecycle hooks
 
-`onListen` (above) is currently the only lifecycle hook `serve()` exposes — there is no `onRequest`/`onResponse` hook. To intercept every request/response, wrap your handler with [`compose()`](#composefns) or write middleware directly in the `(innerHandler) => (request, ctx) => Response` shape used by `leserve/auth` and `onWebSocket()`.
+`onListen` (above) is currently the only lifecycle hook `serve()` exposes — there is no `onRequest`/`onResponse` hook. To intercept every request/response, wrap your handler with [`compose()`](#composefns) or write middleware directly in the `(innerHandler) => (request, ctx) => Response` shape used by `@johnhenry/leserve/auth` and `onWebSocket()`.
 
 #### `onWebSocket(wsHandler)`
 
@@ -90,13 +90,13 @@ serve(handler, { port: 3000 });
 ```
 
 - `wsHandler(ws, request, context)` is called once per established connection with the [`ws`](https://www.npmjs.com/package/ws) `WebSocket` instance, the original upgrade `Request`, and the handler `context`.
-- Because it follows the same `(innerHandler) => handler` shape as other `serve()` middleware, it composes with `compose()`, `leserve/auth`, and your own router just like anything else.
+- Because it follows the same `(innerHandler) => handler` shape as other `serve()` middleware, it composes with `compose()`, `@johnhenry/leserve/auth`, and your own router just like anything else.
 
 ## API Reference
 
 ### Global Types
 
-`Request`, `Response`, `Headers`, `URL`, `URLSearchParams`, and (in modern Node.js) `WebSocket` are standard Node.js runtime globals (Node 18+) — they're available out of the box, and leserve doesn't add or polyfill them.
+`Request`, `Response`, `Headers`, `URL`, `URLSearchParams`, and (in modern Node.js) `WebSocket` are standard Node.js runtime globals (Node 18+) — they're available out of the box, and @johnhenry/leserve doesn't add or polyfill them.
 
 ## Usage: CLI
 
@@ -105,7 +105,7 @@ A flexible CLI tool for serving JavaScript modules with various options.
 ### Installation
 
 ```bash
-npm install -g leserve
+npm install -g @johnhenry/leserve
 ```
 
 ### Usage
@@ -117,7 +117,7 @@ leserve <path-to-file> [options]
 Or
 
 ```bash
-npx leserve <path-to-file> [options]
+npx @johnhenry/leserve <path-to-file> [options]
 ```
 
 #### Options
@@ -272,9 +272,9 @@ serve(app, { port: 3000 });
 
 - Each middleware has the signature `(next) => (request, ctx) => Response`.
 - The last argument is the base handler: `(request, ctx) => Response`.
-- Middleware run in the order passed, each wrapping the next, with the base handler innermost — the same composition order used by `onWebSocket()` and `leserve/auth`.
+- Middleware run in the order passed, each wrapping the next, with the base handler innermost — the same composition order used by `onWebSocket()` and `@johnhenry/leserve/auth`.
 
-Like `leserve/auth` and `onWebSocket()`, `compose()` is designed for the `serve()` model — see [Which API should I use?](#which-api-should-i-use).
+Like `@johnhenry/leserve/auth` and `onWebSocket()`, `compose()` is designed for the `serve()` model — see [Which API should I use?](#which-api-should-i-use).
 
 ## Test Harness
 
@@ -306,15 +306,15 @@ Objects and strings are auto-serialized with the appropriate `content-type`.
 
 | Export | Description |
 |--------|-------------|
-| `leserve` or `leserve/serve` | `serve(handler, options?)`, `onWebSocket(wsHandler)` — Handler-based server (recommended default) |
-| `leserve/genport` | Random port generation |
-| `leserve/body` | `json`, `text`, `form`, `buffer`, `respond`, `error`, `redirect` |
-| `leserve/auth` | `basicAuth`, `bearerAuth`, `apiKeyAuth` — for the `serve()` model |
-| `leserve/compose` | `compose(...fns)` — middleware composition for the `serve()` model |
-| `leserve/test-harness` | `testHandler` — Test `serve()`-style handlers without a server |
-| `leserve/websocket` | `upgradeRawSocket(raw)`, `WEBSOCKET_UPGRADE_RESPONSE` — the low-level primitive `onWebSocket()` is sugar over, for a caller that wants to decide inline within a single request handler whether to upgrade |
-| `leserve/node-request` | `toWebRequest(req, options?)` — converts a raw Node `IncomingMessage` into a Web `Request`, the same conversion `serve()` itself uses |
-| `leserve/trailers` | `setTrailers(response, trailers)`, `getTrailers(response)` — HTTP trailers, which aren't part of the Fetch `Response` model; `serve()` sends them via `res.addTrailers()` after the body finishes |
+| `@johnhenry/leserve` or `@johnhenry/leserve/serve` | `serve(handler, options?)`, `onWebSocket(wsHandler)` — Handler-based server (recommended default) |
+| `@johnhenry/leserve/genport` | Random port generation |
+| `@johnhenry/leserve/body` | `json`, `text`, `form`, `buffer`, `respond`, `error`, `redirect` |
+| `@johnhenry/leserve/auth` | `basicAuth`, `bearerAuth`, `apiKeyAuth` — for the `serve()` model |
+| `@johnhenry/leserve/compose` | `compose(...fns)` — middleware composition for the `serve()` model |
+| `@johnhenry/leserve/test-harness` | `testHandler` — Test `serve()`-style handlers without a server |
+| `@johnhenry/leserve/websocket` | `upgradeRawSocket(raw)`, `WEBSOCKET_UPGRADE_RESPONSE` — the low-level primitive `onWebSocket()` is sugar over, for a caller that wants to decide inline within a single request handler whether to upgrade |
+| `@johnhenry/leserve/node-request` | `toWebRequest(req, options?)` — converts a raw Node `IncomingMessage` into a Web `Request`, the same conversion `serve()` itself uses |
+| `@johnhenry/leserve/trailers` | `setTrailers(response, trailers)`, `getTrailers(response)` — HTTP trailers, which aren't part of the Fetch `Response` model; `serve()` sends them via `res.addTrailers()` after the body finishes |
 
 ## License
 
