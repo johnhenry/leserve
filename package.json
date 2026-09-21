@@ -1,7 +1,7 @@
 {
   "name": "@johnhenry/leserve",
   "version": "0.0.0",
-  "description": "A powerful, flexible HTTP/HTTPS server implementation for Node.js that closely mimics web browser APIs while providing additional features like WebSockets, Server-Sent Events, middleware, and routing.",
+  "description": "A simple HTTP/HTTPS server for Node.js built around one API, serve() — a plain (Request) => Response handler with opt-in WebSocket upgrades, no routing/middleware/event framework attached.",
   "main": "serve.mjs",
   "repository": {
     "type": "git",
@@ -63,7 +63,7 @@
     "test-harness.mjs",
     "auth.mjs",
     "lib/",
-    "readme.md",
+    "README.md",
     "LICENSE"
   ]
 }

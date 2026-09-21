@@ -1,13 +1,39 @@
 # LeServe
 
 [![npm version](https://badge.fury.io/js/%40johnhenry%2Fleserve.svg)](https://www.npmjs.com/package/@johnhenry/leserve)
+[![CI](https://github.com/johnhenry/serve-cold/actions/workflows/ci.yml/badge.svg)](https://github.com/johnhenry/serve-cold/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <img alt="" width="512" height="512" src="./logo.jpeg" style="width:512px;height:512px"/>
 
 A simple HTTP server with support for modern JavaScript features.
 
-LeServe works greate with [LeRoute](https://www.npmjs.com/package/leroute), a library for routing requests.
+LeServe works great with [`@johnhenry/servable`](https://github.com/johnhenry/servable) (and its sibling [`@johnhenry/hostable`](https://github.com/johnhenry/hostable)), which build routing on top of leserve — servable's Node adapter delegates to leserve internally.
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Usage: serve](#usage-serve)
+  - [API](#api)
+- [API Reference](#api-reference)
+  - [Global Types](#global-types)
+- [Usage: CLI](#usage-cli)
+  - [Installation](#installation-1)
+  - [Usage](#usage)
+  - [Default Behavior](#default-behavior)
+  - [Echo Mode](#echo-mode)
+- [Body Parsing & Response Helpers](#body-parsing--response-helpers)
+  - [Request Parsing](#request-parsing)
+  - [Response Helpers](#response-helpers)
+- [Authentication Middleware](#authentication-middleware)
+  - [`basicAuth(validate)`](#basicauthvalidate)
+  - [`bearerAuth(validate)`](#bearerauthvalidate)
+  - [`apiKeyAuth(validate, options?)`](#apikeyauthvalidate-options)
+- [Middleware Composition](#middleware-composition)
+  - [`compose(...fns)`](#composefns)
+- [Test Harness](#test-harness)
+- [Exports](#exports)
+- [License](#license)
 
 ## Installation
 
@@ -71,7 +97,7 @@ The handler function receives a `Request` object (and an optional `context` obje
 
 #### `onWebSocket(wsHandler)`
 
-A composable WebSocket-upgrade middleware for the `serve()` model — this is `serve.mjs`'s equivalent of `controls`'s built-in WebSocket support, kept explicit and opt-in rather than automatic.
+A composable WebSocket-upgrade middleware for the `serve()` model — kept explicit and opt-in rather than automatic. (SSE, routing, and middleware built on top of `serve()` now live in [`@johnhenry/servant`](https://github.com/johnhenry/servant), not in this package.)
 
 `onWebSocket` returns a middleware factory `(innerHandler) => composedHandler`: requests with an `Upgrade: websocket` header are upgraded and handed to `wsHandler`; every other request falls through to `innerHandler` unchanged.
 
@@ -274,7 +300,7 @@ serve(app, { port: 3000 });
 - The last argument is the base handler: `(request, ctx) => Response`.
 - Middleware run in the order passed, each wrapping the next, with the base handler innermost — the same composition order used by `onWebSocket()` and `@johnhenry/leserve/auth`.
 
-Like `@johnhenry/leserve/auth` and `onWebSocket()`, `compose()` is designed for the `serve()` model — see [Which API should I use?](#which-api-should-i-use).
+Like `@johnhenry/leserve/auth` and `onWebSocket()`, `compose()` is designed for the `serve()` model.
 
 ## Test Harness
 
