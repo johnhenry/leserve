@@ -1,7 +1,7 @@
 # LeServe
 
 [![npm version](https://badge.fury.io/js/%40johnhenry%2Fleserve.svg)](https://www.npmjs.com/package/@johnhenry/leserve)
-[![CI](https://github.com/johnhenry/serve-cold/actions/workflows/ci.yml/badge.svg)](https://github.com/johnhenry/serve-cold/actions/workflows/ci.yml)
+[![CI](https://github.com/johnhenry/leserve/actions/workflows/ci.yml/badge.svg)](https://github.com/johnhenry/leserve/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <img alt="" width="512" height="512" src="./logo.jpeg" style="width:512px;height:512px"/>

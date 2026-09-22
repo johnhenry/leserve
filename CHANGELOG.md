@@ -9,7 +9,7 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 
 ### Changed (breaking)
 
-- **Renamed the package from unscoped `leserve` to `@johnhenry/leserve`**, adopting it into the `@johnhenry` npm scope. Version restarts at `0.0.0` (it was already at `0.0.0` unscoped, so this isn't a downgrade -- just a new home). Added `publishConfig`, CI, and publish workflows for the scoped package, matching the rest of the `@johnhenry/*` family. The GitHub repository is intentionally kept as `serve-cold` rather than renamed to match the new package name.
+- **Renamed the package from unscoped `leserve` to `@johnhenry/leserve`**, adopting it into the `@johnhenry` npm scope. Version restarts at `0.0.0` (it was already at `0.0.0` unscoped, so this isn't a downgrade -- just a new home). Added `publishConfig`, CI, and publish workflows for the scoped package, matching the rest of the `@johnhenry/*` family. The GitHub repository was intentionally kept as `serve-cold` rather than renamed to match the new package name -- **superseded 2026-09-21: the GitHub repository has since been renamed to `leserve` to match, so `repository`/`bugs`/`homepage` in `package.json` and the CI badge in README.md now point at `github.com/johnhenry/leserve`.**
 
 ### Removed
 

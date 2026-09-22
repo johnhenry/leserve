@@ -5,7 +5,7 @@
   "main": "serve.mjs",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/johnhenry/serve-cold.git"
+    "url": "git+https://github.com/johnhenry/leserve.git"
   },
   "type": "module",
   "scripts": {
@@ -25,7 +25,7 @@
   "license": "MIT",
   "homepage": "https://opensource.johnhenry.me/leserve/",
   "bugs": {
-    "url": "https://github.com/johnhenry/serve-cold/issues"
+    "url": "https://github.com/johnhenry/leserve/issues"
   },
   "engines": {
     "node": ">=26.0.0"
