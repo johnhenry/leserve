@@ -4,13 +4,15 @@
 [![CI](https://github.com/johnhenry/leserve/actions/workflows/ci.yml/badge.svg)](https://github.com/johnhenry/leserve/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+Full documentation: [opensource.johnhenry.me/leserve](https://opensource.johnhenry.me/leserve/)
+
 <img alt="" width="512" height="512" src="./logo.jpeg" style="width:512px;height:512px"/>
 
 A simple HTTP server with support for modern JavaScript features.
 
-LeServe works great with [`@johnhenry/servable`](https://github.com/johnhenry/servable) (and its sibling [`@johnhenry/hostable`](https://github.com/johnhenry/hostable)), which build routing on top of leserve — servable's Node adapter delegates to leserve internally.
+LeServe works great with [`@johnhenry/servable`](https://github.com/johnhenry/servable) (and its sibling [`@johnhenry/hostable`](https://github.com/johnhenry/hostable)), which build routing on top of leserve — servable's Node adapter delegates to leserve internally. See [`## Family`](#family) below for the full relationship, including `@johnhenry/servant`.
 
-## Table of Contents
+## Contents
 
 - [Installation](#installation)
 - [Usage: serve](#usage-serve)
@@ -33,6 +35,8 @@ LeServe works great with [`@johnhenry/servable`](https://github.com/johnhenry/se
   - [`compose(...fns)`](#composefns)
 - [Test Harness](#test-harness)
 - [Exports](#exports)
+- [Security model](#security-model)
+- [Family](#family)
 - [License](#license)
 
 ## Installation
@@ -341,6 +345,87 @@ Objects and strings are auto-serialized with the appropriate `content-type`.
 | `@johnhenry/leserve/websocket` | `upgradeRawSocket(raw)`, `WEBSOCKET_UPGRADE_RESPONSE` — the low-level primitive `onWebSocket()` is sugar over, for a caller that wants to decide inline within a single request handler whether to upgrade |
 | `@johnhenry/leserve/node-request` | `toWebRequest(req, options?)` — converts a raw Node `IncomingMessage` into a Web `Request`, the same conversion `serve()` itself uses |
 | `@johnhenry/leserve/trailers` | `setTrailers(response, trailers)`, `getTrailers(response)` — HTTP trailers, which aren't part of the Fetch `Response` model; `serve()` sends them via `res.addTrailers()` after the body finishes |
+
+## Security model
+
+**What leserve guarantees:**
+
+- **Malformed credentials fail as a 401, not a 500.** `basicAuth()`'s
+  base64/`user:pass` decoding is wrapped so a non-base64 or colon-less
+  `Authorization` header returns `unauthorized("Malformed credentials")`
+  instead of letting `atob()`'s synchronous throw propagate past the
+  middleware as an uncaught error.
+- **`body.mjs`'s `limit` option actually stops reading at the limit.**
+  `json()`/`text()`/`buffer()` stream and count bytes, aborting with
+  `{ status: 413 }` as soon as the configured size is exceeded, rather than
+  buffering the full body first and checking afterward (which would defeat
+  the point of a limit against a large payload).
+- **A single malformed request cannot crash the process.** Building the Web
+  `Request` from a raw `IncomingMessage` (`lib/node-request.mjs`) is wrapped
+  so a request-target Node's own HTTP parser lets through but `new URL()`
+  rejects becomes a 400, not an uncaught synchronous throw outside any
+  handler's `try`/`catch`.
+- **Multi-value response headers and mid-stream errors are handled
+  correctly**, not silently dropped/swallowed -- repeated `Set-Cookie`
+  values all reach the client, and a `ReadableStream` error partway through
+  a response is forwarded (`stream/promises`' `pipeline()`) instead of
+  crashing the process via an unhandled `'error'` event.
+
+**What is still yours:**
+
+- **`basicAuth`/`bearerAuth`/`apiKeyAuth` only parse and dispatch --
+  the `validate` function you supply is where the actual authorization
+  decision happens.** A `validate` that returns `true` unconditionally
+  (or compares with a non-constant-time `===`, or trusts a value it
+  shouldn't) reinstates whatever hole that implies; these factories give
+  you a correctly-parsed credential and a 401 on rejection, nothing more.
+- **`request.url` (and therefore `.host`/`.origin`) is built from the
+  client-supplied `Host` header, unvalidated.** `toWebRequest()`
+  (`lib/node-request.mjs`) constructs the request's URL as `new URL(req.url,
+  \`http://${req.headers.host}\`)`, falling back to `"localhost"` only if
+  the header is absent entirely -- there is no allowlist otherwise. If a
+  handler reads `request.url`/`.host`/`.origin` to build absolute links,
+  redirects, or a CORS decision, that value is attacker-controlled input
+  unless a reverse proxy in front of `serve()` strips/overwrites the
+  inbound `Host` header first. (The same construction is reused by
+  `@johnhenry/servant` via `leserve/node-request` -- see its own README for
+  the identical caveat, stated independently.)
+- **TLS is your own certificate/key management.** `serve()`'s `cert`/`key`
+  options are passed straight through to Node's `https` server; leserve
+  does not provision, rotate, or validate certificates.
+- **No built-in rate limiting or lockout** on any of the auth middleware --
+  compose your own (`compose(rateLimiter, requireAuth, handler)`) if that
+  matters for your deployment.
+
+## Family
+
+leserve is the shared HTTP bridge underneath three other `@johnhenry/*`
+packages -- each depends on it for a different slice, not identically.
+
+- **[`@johnhenry/servable`](https://github.com/johnhenry/servable)**
+  (and, transitively, **[`@johnhenry/hostable`](https://github.com/johnhenry/hostable)**,
+  which is built on servable) -- the Node adapter (`adapters/node`)
+  delegates to this package's own `serve()` rather than maintaining a
+  second `IncomingMessage`/`ServerResponse` -> `Request`/`Response` bridge.
+  `@johnhenry/leserve` is an **optional peer dependency** of servable, only
+  needed by that one adapter. servable's own WebSocket support
+  (`upgradeWebSocket()`) also delegates to this package's
+  `upgradeRawSocket()` on Node specifically, since Node has no built-in
+  server-side WebSocket upgrade/framing at all.
+- **[`@johnhenry/servant`](https://github.com/johnhenry/servant)** -- a
+  separate, self-contained, batteries-included server (routing, middleware,
+  WebSocket support, dispatched through a service-worker-style
+  `addEventListener('fetch', ...)` API) that does **not** interoperate with
+  this package's own `serve()` as a drop-in -- they're independent
+  implementations of "a server", and `servant`'s README and this one both
+  say so. That said, `servant` genuinely depends on
+  `@johnhenry/leserve` in `package.json`, for exactly one thing: `leserve/node-request`'s
+  `toWebRequest()`, the same `IncomingMessage` -> `Request` conversion this
+  package uses internally (see "What is still yours" above for the
+  Host-header caveat that conversion carries into `servant` too).
+  `servant` was originally extracted *from* this package's own
+  `controls.mjs`/`event.mjs` (see CHANGELOG) before becoming its own
+  package.
 
 ## License
 
