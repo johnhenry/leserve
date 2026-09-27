@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.0.
 
+## [0.0.1] - 2026-09-26
+
+### Fixed
+
+- **`basicAuth` mis-decoded any username/password containing a non-ASCII character**: it decoded the `Authorization: Basic` base64 payload with `atob()` alone, which returns a *Latin-1* binary string (one byte per code unit), not UTF-8 text. RFC 7617 defaults Basic Auth credentials to UTF-8 unless a `charset` is explicitly negotiated, so an accented letter or emoji in a credential (e.g. `café🎉`) round-tripped as mangled garbage (`cafÃ©ð...`) instead of the original string, silently breaking `validate()` comparisons for real-world non-ASCII users. Fixed by re-decoding `atob()`'s raw bytes with `TextDecoder("utf-8")` (`Uint8Array.from(atob(...), c => c.charCodeAt(0))` fed to the decoder) before splitting on `:`. A malformed/non-UTF-8 payload now still correctly falls through to the existing 401 path (decoder is `fatal: true`).
+
 ## [0.0.0] - 2026-09-19
 
 ### Changed (breaking)

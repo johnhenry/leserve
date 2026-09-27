@@ -515,6 +515,30 @@ describe("auth.mjs", async () => {
     assert.equal(noColon.status, 401);
   });
 
+  await test("basicAuth decodes non-ASCII credentials as UTF-8, not Latin-1", async () => {
+    // Regression for: the base64 payload was decoded with `atob()` alone,
+    // which returns a Latin-1 binary string, not UTF-8 text. RFC 7617
+    // defaults Basic Auth credentials to UTF-8, so a username/password
+    // containing a multi-byte character (accented letter, emoji, ...) came
+    // out mangled instead of round-tripping intact.
+    const username = "admin";
+    const password = "café🎉";
+    let received;
+    const app = testHandler(
+      basicAuth(async (u, p) => {
+        received = [u, p];
+        return true;
+      })(ok)
+    );
+
+    const res = await app.get("/", {
+      authorization: `Basic ${Buffer.from(`${username}:${password}`, "utf-8").toString("base64")}`,
+    });
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(received, [username, password]);
+  });
+
   await test("bearerAuth rejects unauthenticated requests and passes through authenticated ones", async () => {
     const app = testHandler(bearerAuth(async (token) => token === "secret-token")(ok));
 
