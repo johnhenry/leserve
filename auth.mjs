@@ -42,7 +42,14 @@ export const basicAuth = (validate) => (handler) => async (request, ctx) => {
   // same way rather than passing mangled values to `validate()`.
   let decoded;
   try {
-    decoded = atob(auth.slice(6));
+    // `atob()` returns a *binary* string: each UTF-16 code unit is one
+    // decoded byte (0-255), i.e. Latin-1. RFC 7617 defaults credentials to
+    // UTF-8, so any username/password with a non-ASCII character (e.g. an
+    // accented letter or emoji) round-trips as mangled text if that binary
+    // string is used directly. Re-decode the raw bytes as UTF-8 instead.
+    decoded = new TextDecoder("utf-8", { fatal: true }).decode(
+      Uint8Array.from(atob(auth.slice(6)), (c) => c.charCodeAt(0))
+    );
   } catch {
     return unauthorized("Malformed credentials", "Basic");
   }
