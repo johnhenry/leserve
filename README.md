@@ -344,6 +344,7 @@ Objects and strings are auto-serialized with the appropriate `content-type`.
 | `@johnhenry/leserve/test-harness` | `testHandler` — Test `serve()`-style handlers without a server |
 | `@johnhenry/leserve/websocket` | `upgradeRawSocket(raw)`, `WEBSOCKET_UPGRADE_RESPONSE` — the low-level primitive `onWebSocket()` is sugar over, for a caller that wants to decide inline within a single request handler whether to upgrade |
 | `@johnhenry/leserve/node-request` | `toWebRequest(req, options?)` — converts a raw Node `IncomingMessage` into a Web `Request`, the same conversion `serve()` itself uses |
+| `@johnhenry/leserve/node-to-web` | `toWebResponse(nodeRes, body?)` — converts a Node client-response `IncomingMessage` (the `res` from `http.request()`/`https.request()`) into a Web `Response`; the mirror image of `node-request`'s conversion, for code that talks to *other* servers via Node's client APIs (e.g. a proxy) and wants to re-express what comes back as a `Response` |
 | `@johnhenry/leserve/trailers` | `setTrailers(response, trailers)`, `getTrailers(response)` — HTTP trailers, which aren't part of the Fetch `Response` model; `serve()` sends them via `res.addTrailers()` after the body finishes |
 
 ## Security model
@@ -400,7 +401,17 @@ Objects and strings are auto-serialized with the appropriate `content-type`.
 ## Family
 
 leserve is the shared HTTP bridge underneath three other `@johnhenry/*`
-packages -- each depends on it for a different slice, not identically.
+packages -- each depends on it for a different slice, not identically. It
+in turn depends on:
+
+- **[`@johnhenry/webwire`](https://github.com/johnhenry/webwire)** -- the
+  actual Node<->Web `Request`/`Response` conversion logic
+  (`toWebRequest`/`toWebResponse`/`writeWebResponse`) used to live here
+  (`lib/node-request.mjs`/`lib/node-to-web.mjs`, and inlined in
+  `serve.mjs`). Extracted once a real, independently-duplicated (and
+  slightly buggy) copy turned up in `@johnhenry/dialback`. `lib/node-request.mjs`/
+  `lib/node-to-web.mjs`/`lib/trailers.mjs` are now thin re-exports, kept at
+  their original paths for backward compatibility.
 
 - **[`@johnhenry/servable`](https://github.com/johnhenry/servable)**
   (and, transitively, **[`@johnhenry/hostable`](https://github.com/johnhenry/hostable)**,
@@ -426,6 +437,13 @@ packages -- each depends on it for a different slice, not identically.
   `servant` was originally extracted *from* this package's own
   `controls.mjs`/`event.mjs` (see CHANGELOG) before becoming its own
   package.
+- **[`@johnhenry/prism`](https://github.com/johnhenry/prism)** -- a live
+  HTTP request inspector/proxy that uses this package's `serve()` to run
+  and, in proxy mode, needs to convert a Node *client*-response (from
+  `http.request()`/`https.request()`) into a Web `Response` -- the mirror
+  image of `node-request`'s server-side conversion. Porting it found that
+  capability missing (a real migration gap from before the `@johnhenry`
+  scoping), closed as `@johnhenry/leserve/node-to-web`'s `toWebResponse()`.
 
 ## License
 

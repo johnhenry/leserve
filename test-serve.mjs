@@ -1,7 +1,10 @@
 // test-serve.mjs
 //
 // Exercises the `serve()` handler-based server path and its supporting
-// modules: serve.mjs, onWebSocket, body.mjs, auth.mjs, and compose.mjs.
+// modules: serve.mjs, onWebSocket, body.mjs, auth.mjs, compose.mjs, and
+// lib/node-to-web.mjs (the client-response-side counterpart to
+// lib/node-request.mjs, which serve() itself already exercises implicitly
+// via every request it handles).
 //
 // `test-harness.mjs`'s `testHandler()` is used for the pure `(Request, ctx)
 // => Response` middleware tests (body parsing, auth, compose) since those
@@ -19,6 +22,7 @@ import genPort from "./gen-random-port.mjs";
 import serve, { onWebSocket } from "./serve.mjs";
 import { upgradeRawSocket, WEBSOCKET_UPGRADE_RESPONSE } from "./lib/websocket.mjs";
 import { setTrailers } from "./lib/trailers.mjs";
+import { toWebResponse } from "./lib/node-to-web.mjs";
 import { json, text, form, buffer } from "./body.mjs";
 import { basicAuth, bearerAuth, apiKeyAuth } from "./auth.mjs";
 import { compose } from "./compose.mjs";
@@ -599,5 +603,68 @@ describe("compose()", async () => {
   await test("with a single function returns it unchanged", () => {
     const handler = () => new Response("solo");
     assert.equal(compose(handler), handler);
+  });
+});
+
+describe("node-to-web.mjs", async () => {
+  await test("toWebResponse() converts status, statusText, headers, and body", async () => {
+    const nodeRes = {
+      statusCode: 201,
+      statusMessage: "Created",
+      headers: {
+        "content-type": "text/plain",
+        "x-multi": ["a", "b"],
+        "x-null": null,
+      },
+    };
+
+    const response = toWebResponse(nodeRes, "hello");
+
+    assert.equal(response.status, 201);
+    assert.equal(response.statusText, "Created");
+    assert.equal(response.headers.get("content-type"), "text/plain");
+    assert.equal(response.headers.get("x-multi"), "a, b");
+    assert.equal(response.headers.has("x-null"), false);
+    assert.equal(await response.text(), "hello");
+  });
+
+  await test("toWebResponse() with no body produces an empty-bodied Response", async () => {
+    const nodeRes = { statusCode: 204, statusMessage: "No Content", headers: {} };
+    const response = toWebResponse(nodeRes);
+    assert.equal(response.status, 204);
+    assert.equal(await response.text(), "");
+  });
+
+  await test("round-trips a real Node client response (http.request) into a Web Response", async () => {
+    const port = await genPort();
+    const server = await serveReady(
+      () =>
+        new Response("real server body", {
+          status: 200,
+          headers: { "content-type": "text/plain", "x-custom": "yes" },
+        }),
+      { port },
+    );
+    try {
+      const nodeRes = await new Promise((resolveReq, rejectReq) => {
+        const clientReq = http.request(`http://localhost:${port}/`, resolveReq);
+        clientReq.on("error", rejectReq);
+        clientReq.end();
+      });
+      const chunks = [];
+      for await (const chunk of nodeRes) {
+        chunks.push(chunk);
+      }
+      const body = Buffer.concat(chunks);
+
+      const response = toWebResponse(nodeRes, body);
+
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("content-type"), "text/plain");
+      assert.equal(response.headers.get("x-custom"), "yes");
+      assert.equal(await response.text(), "real server body");
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
   });
 });
