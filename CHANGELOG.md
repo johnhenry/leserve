@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.0.
 
+## [Unreleased] - 2026-09-28
+
+### Changed
+
+- **`toWebRequest()`, `toWebResponse()`, and `serve.mjs`'s own Web-`Response`-to-`ServerResponse`
+  write-out logic moved to the new `@johnhenry/webwire` package.** A real,
+  independent duplicate of the first and third turned up in
+  `@johnhenry/dialback` (with a real correctness gap in its version of the
+  write-out logic: silently-dropped multi-value headers), alongside
+  `@johnhenry/servant` already depending on `@johnhenry/leserve` *just* for
+  `toWebRequest` -- together, the signal that this conversion logic had
+  outgrown living inside a server package. `lib/node-request.mjs`,
+  `lib/node-to-web.mjs`, and `lib/trailers.mjs` are now thin re-exports of
+  webwire's equivalents, kept at their original paths so nothing depending
+  on `@johnhenry/leserve/node-request` (servant) or
+  `@johnhenry/leserve/node-to-web`/`@johnhenry/leserve/trailers` needs to
+  change. `serve.mjs` itself now calls webwire's `writeWebResponse()`
+  directly instead of its own ~85-line inline version -- behavior is
+  unchanged (same tests, unmodified, all still pass), see
+  `@johnhenry/webwire`'s own README for the full API.
+
+### Added
+
+- **Restored `@johnhenry/leserve/node-to-web`** (`toWebResponse(nodeRes, body?)`), a genuine migration gap closed. This capability existed in the pre-`@johnhenry` scoping `leserve` package (`node-to-web.mjs`) but was dropped somewhere during the move to `@johnhenry/leserve` -- it was never re-added anywhere, under this or any other name. The gap only surfaced while porting a downstream consumer, `prism` (an HTTP request inspector/proxy), into the `@johnhenry` family: it imports `toWebResponse` from `leserve/node-to-web` to convert the raw Node `IncomingMessage` client responses it receives while proxying (from `http.request()`/`https.request()`) into Web `Response` objects, and that subpath simply didn't exist. It is the mirror image of the existing `@johnhenry/leserve/node-request` (`toWebRequest()`) -- that converts an *inbound* server-side `IncomingMessage` into a `Request`, the same conversion `serve()` itself already used internally; this converts the *response* `IncomingMessage` Node hands back from an *outbound* client request into a `Response`, which `serve()` had no equivalent of internally since it never makes outbound requests. Originally ported as new code at `lib/node-to-web.mjs`; now (see "Changed" above) a thin re-export of `@johnhenry/webwire`'s `toWebResponse()`, kept at this same path.
+
 ## [0.0.1] - 2026-09-26
 
 ### Fixed

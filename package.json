@@ -35,6 +35,7 @@
     "provenance": true
   },
   "dependencies": {
+    "@johnhenry/webwire": "^0.0.0",
     "theres-waldo": "^0.0.0",
     "ws": "^8.18.0"
   },
@@ -51,6 +52,7 @@
     "./auth": "./auth.mjs",
     "./compose": "./compose.mjs",
     "./node-request": "./lib/node-request.mjs",
+    "./node-to-web": "./lib/node-to-web.mjs",
     "./websocket": "./lib/websocket.mjs",
     "./trailers": "./lib/trailers.mjs"
   },
