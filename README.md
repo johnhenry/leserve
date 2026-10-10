@@ -437,13 +437,6 @@ in turn depends on:
   `servant` was originally extracted *from* this package's own
   `controls.mjs`/`event.mjs` (see CHANGELOG) before becoming its own
   package.
-- **[`@johnhenry/prism`](https://github.com/johnhenry/prism)** -- a live
-  HTTP request inspector/proxy that uses this package's `serve()` to run
-  and, in proxy mode, needs to convert a Node *client*-response (from
-  `http.request()`/`https.request()`) into a Web `Response` -- the mirror
-  image of `node-request`'s server-side conversion. Porting it found that
-  capability missing (a real migration gap from before the `@johnhenry`
-  scoping), closed as `@johnhenry/leserve/node-to-web`'s `toWebResponse()`.
 
 ## License
 
